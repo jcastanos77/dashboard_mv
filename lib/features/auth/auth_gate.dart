@@ -57,7 +57,9 @@ class AuthGate extends StatelessWidget {
               return const CreateBusinessPage();
             }
 
-            return const HomePage();
+            return const Scaffold(
+              body: Center(child: Text("ENTRÓ A HOME")),
+            );
           },
         );
       },

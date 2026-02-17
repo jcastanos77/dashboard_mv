@@ -12,6 +12,10 @@ void main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
+  FlutterError.onError = (FlutterErrorDetails details) {
+    print("🔥 FLUTTER ERROR: ${details.exception}");
+  };
+
   runApp(const MyApp());
 }
 

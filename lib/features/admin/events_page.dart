@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import '../../core/business_helper.dart';
 import '../events/create_event_page.dart';
+import 'event_detail_page.dart';
 
 class EventsPage extends StatefulWidget {
   final String businessId;
@@ -247,8 +248,21 @@ class _EventsPageState extends State<EventsPage> {
                   final date =
                   (data['date'] as Timestamp).toDate();
 
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 14),
+                  return GestureDetector(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          CupertinoPageRoute(
+                            builder: (_) => EventDetailPage(
+                              eventId: _events[index].id,
+                              eventData: data,
+                              businessId: widget.businessId,
+                            ),
+                          ),
+                        );
+                      },
+                      child: Container(
+                      margin: const EdgeInsets.only(bottom: 14),
                     padding: const EdgeInsets.all(18),
                     decoration: BoxDecoration(
                       color: cardBg,
@@ -305,7 +319,7 @@ class _EventsPageState extends State<EventsPage> {
                         ),
                       ],
                     ),
-                  );
+                  ));
                 },
               ),
             ),

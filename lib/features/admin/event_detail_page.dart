@@ -1,6 +1,6 @@
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/add_payment_dialog.dart';
@@ -27,6 +27,11 @@ class _EventDetailPageState extends State<EventDetailPage> {
   @override
   Widget build(BuildContext context) {
 
+    final bg = CupertinoColors.systemGroupedBackground.resolveFrom(context);
+    final cardBg = CupertinoColors.secondarySystemGroupedBackground.resolveFrom(context);
+    final label = CupertinoColors.label.resolveFrom(context);
+    final secondary = CupertinoColors.secondaryLabel.resolveFrom(context);
+
     final data = widget.eventData;
 
     final total = (data['totalPrice'] ?? 0) as num;
@@ -37,6 +42,7 @@ class _EventDetailPageState extends State<EventDetailPage> {
     final DateTime date = timestamp?.toDate() ?? DateTime.now();
 
     return CupertinoPageScaffold(
+      backgroundColor: bg,
       navigationBar: CupertinoNavigationBar(
         middle: const Text("Detalle Evento"),
         trailing: CupertinoButton(
@@ -58,57 +64,33 @@ class _EventDetailPageState extends State<EventDetailPage> {
       ),
       child: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 10, 20, 40),
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 40),
           children: [
 
-            /// CLIENT INFO CARD
-            _sectionCard(
+            /// CLIENT HEADER
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: cardBg,
+                borderRadius: BorderRadius.circular(24),
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     data['clientName'] ?? '',
-                    style: const TextStyle(
-                      fontSize: 20,
+                    style: TextStyle(
+                      fontSize: 22,
                       fontWeight: FontWeight.w600,
+                      color: label,
                     ),
                   ),
                   const SizedBox(height: 6),
                   Text(
                     DateFormat('dd MMM yyyy').format(date),
-                    style: const TextStyle(
-                      color: CupertinoColors.inactiveGray,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 16),
-
-            /// FINANCIAL CARD
-            _sectionCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-
-                  _moneyRow("Total", total),
-                  _moneyRow("Pagado", paid),
-
-                  const SizedBox(height: 8),
-
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: Text(
-                      remaining == 0
-                          ? "Liquidado"
-                          : "Restante \$${remaining.toStringAsFixed(0)}",
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        color: remaining == 0
-                            ? CupertinoColors.systemGreen
-                            : CupertinoColors.systemRed,
-                      ),
+                    style: TextStyle(
+                      color: secondary,
+                      fontSize: 15,
                     ),
                   ),
                 ],
@@ -117,18 +99,70 @@ class _EventDetailPageState extends State<EventDetailPage> {
 
             const SizedBox(height: 20),
 
-            /// PAYMENTS TITLE
-            const Text(
-              "Pagos",
-              style: TextStyle(
-                fontWeight: FontWeight.w600,
-                fontSize: 16,
+            /// FINANCIAL CARD
+            /// FINANCIAL BLOCK
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: cardBg,
+                borderRadius: BorderRadius.circular(28),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+
+                  /// RESTANTE PROTAGONISTA
+                  Text(
+                    remaining == 0
+                        ? "Liquidado"
+                        : "\$${remaining.toStringAsFixed(0)}",
+                    style: TextStyle(
+                      fontSize: 34,
+                      fontWeight: FontWeight.w700,
+                      color: remaining == 0
+                          ? CupertinoColors.systemGreen
+                          : CupertinoColors.label.resolveFrom(context),
+                    ),
+                  ),
+
+                  const SizedBox(height: 4),
+
+                  Text(
+                    remaining == 0 ? "Evento pagado" : "Pendiente",
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                    ),
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  Divider(
+                    color: CupertinoColors.separator.resolveFrom(context),
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  _moneyRow("Total", total, label),
+                  _moneyRow("Pagado", paid, label),
+                ],
               ),
             ),
 
-            const SizedBox(height: 10),
 
-            /// PAYMENTS LIST
+            const SizedBox(height: 28),
+
+            Text(
+              "Pagos",
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 17,
+                color: label,
+              ),
+            ),
+
+            const SizedBox(height: 12),
+
             StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
                   .collection('businesses')
@@ -147,14 +181,9 @@ class _EventDetailPageState extends State<EventDetailPage> {
                 final payments = snap.data!.docs;
 
                 if (payments.isEmpty) {
-                  return const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 20),
-                    child: Text(
-                      "Sin pagos registrados",
-                      style: TextStyle(
-                        color: CupertinoColors.inactiveGray,
-                      ),
-                    ),
+                  return Text(
+                    "Sin pagos registrados",
+                    style: TextStyle(color: secondary),
                   );
                 }
 
@@ -164,22 +193,27 @@ class _EventDetailPageState extends State<EventDetailPage> {
                     final payment =
                     doc.data() as Map<String, dynamic>;
 
-                    return _sectionCard(
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 10),
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: cardBg,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
                       child: Row(
                         mainAxisAlignment:
                         MainAxisAlignment.spaceBetween,
                         children: [
                           Text(
                             "\$${payment['amount']}",
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontWeight: FontWeight.w600,
+                              color: label,
                             ),
                           ),
                           Text(
                             payment['method'] ?? '',
-                            style: const TextStyle(
-                              color: CupertinoColors.inactiveGray,
-                            ),
+                            style: TextStyle(color: secondary),
                           ),
                         ],
                       ),
@@ -190,10 +224,10 @@ class _EventDetailPageState extends State<EventDetailPage> {
               },
             ),
 
-            const SizedBox(height: 24),
+            const SizedBox(height: 32),
 
-            /// ACTION BUTTONS
             CupertinoButton.filled(
+              borderRadius: BorderRadius.circular(18),
               onPressed: () {
                 showDialog(
                   context: context,
@@ -208,14 +242,14 @@ class _EventDetailPageState extends State<EventDetailPage> {
               child: const Text("Agregar Abono"),
             ),
 
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
 
             CupertinoButton(
+              borderRadius: BorderRadius.circular(18),
               color: CupertinoColors.systemGreen,
               onPressed: () async {
 
                 final phone = data['phone'] ?? '';
-
                 if (phone.isEmpty) return;
 
                 final message = """
@@ -237,7 +271,7 @@ Gracias por confiar en nosotros 🙌
 
                 await launchUrl(Uri.parse(url));
               },
-              child: const Text("Enviar por WhatsApp"),
+              child: const Text("Enviar por WhatsApp", style: TextStyle(color: Colors.white),),
             ),
           ],
         ),
@@ -245,31 +279,26 @@ Gracias por confiar en nosotros 🙌
     );
   }
 
-  Widget _sectionCard({required Widget child}) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      margin: const EdgeInsets.only(bottom: 10),
-      decoration: BoxDecoration(
-        color: CupertinoColors.white,
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: child,
-    );
-  }
-
-  Widget _moneyRow(String label, num value) {
+  Widget _moneyRow(String labelText, num value, Color labelColor) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.only(bottom: 8),
       child: Row(
         mainAxisAlignment:
         MainAxisAlignment.spaceBetween,
         children: [
-          Text(label),
+          Text(
+            labelText,
+            style: TextStyle(
+              color: labelColor,
+              fontSize: 16,
+            ),
+          ),
           Text(
             "\$${value.toStringAsFixed(0)}",
-            style: const TextStyle(
+            style: TextStyle(
               fontWeight: FontWeight.w600,
+              fontSize: 16,
+              color: labelColor,
             ),
           ),
         ],

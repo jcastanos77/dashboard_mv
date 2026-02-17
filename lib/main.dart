@@ -26,19 +26,17 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return CupertinoApp(
       builder: (context, child) {
-
-        final mediaQuery =
-        MediaQuery.of(context);
+        final mediaQuery = MediaQuery.of(context);
 
         return MediaQuery(
           data: mediaQuery.copyWith(
             textScaleFactor:
-            mediaQuery.textScaleFactor
-                .clamp(1.0, 1.2),
+            mediaQuery.textScaleFactor.clamp(1.0, 1.2),
           ),
-          child: child!,
+          child: child ?? const SizedBox(),
         );
       },
+
       home: const AuthGate(),
     );
 

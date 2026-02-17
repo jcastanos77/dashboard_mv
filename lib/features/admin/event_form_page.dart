@@ -56,6 +56,8 @@ class _EventFormPageState
       total += option.extraCost;
     }
 
+    if (!mounted) return;
+
     setState(() {
       _total = total;
     });
@@ -199,6 +201,8 @@ class _EventFormPageState
 
     if (_selectedService == null) return;
 
+    if (!mounted) return;
+
     setState(() {
       _isCheckingAvailability = true;
     });
@@ -229,6 +233,8 @@ class _EventFormPageState
         availabilityDoc.data()?[
         _selectedService!.id] ??
             0;
+
+    if (!mounted) return;
 
     setState(() {
       _availableSpots = capacity - used;
@@ -274,6 +280,7 @@ class _EventFormPageState
                       );
 
                       if (picked != null) {
+                        if (!mounted) return;
                         setState(() {
                           _selectedDate =
                               picked;
@@ -357,6 +364,7 @@ class _EventFormPageState
                             ))
                             .toList(),
                         onChanged: (val) async{
+                          if (!mounted) return;
                           setState(() {
                             _selectedService =
                                 val;
@@ -447,6 +455,7 @@ class _EventFormPageState
                               ))
                               .toList(),
                           onChanged: (val) {
+                            if (!mounted) return;
                             setState(() {
                               _selectedPackage =
                                   val;
@@ -512,6 +521,7 @@ class _EventFormPageState
                               selected: selected,
                               onSelected:
                                   (val) {
+                                    if (!mounted) return;
                                 setState(() {
                                   if (selected) {
                                     _selectedOptions

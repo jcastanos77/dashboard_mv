@@ -1,687 +1,468 @@
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
-import '../../core/business_helper.dart';
-import '../../services/event_service.dart';
 
 class CreateEventPage extends StatefulWidget {
   final String businessId;
+
   const CreateEventPage({super.key, required this.businessId});
 
   @override
-  State<CreateEventPage> createState() =>
-      _CreateEventPageState();
+  State<CreateEventPage> createState() => _CreateEventPageState();
 }
 
-class _CreateEventPageState
-    extends State<CreateEventPage> {
+class _CreateEventPageState extends State<CreateEventPage> {
 
-  final _formKey = GlobalKey<FormState>();
+  final _clientController = TextEditingController();
+  final _phoneController = TextEditingController();
+  final _locationController = TextEditingController();
 
-  final _clientController =
-  TextEditingController();
-  final _phoneController =
-  TextEditingController();
-  final _locationController =
-  TextEditingController();
-  final _anticipoController =
-  TextEditingController();
+  DateTime _selectedDate = DateTime.now();
 
-  final EventService _eventService =
-  EventService();
+  List<SelectedService> _services = [];
 
-  String? _businessId;
-  bool _initialLoading = true;
-
-  DateTime _selectedDate =
-  DateTime.now();
-
-  String? _selectedServiceId;
-  String? _selectedServiceName;
-
-  String? _selectedPackageId;
-  String? _selectedPackageName;
-  double _total = 0;
-
-  bool _isFull = false;
-  bool _checkingCapacity = false;
-  bool _loading = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _init();
+  double get totalPrice {
+    double sum = 0;
+    for (var s in _services) {
+      sum += s.totalServicePrice;
+    }
+    return sum;
   }
 
-  Future<void> _init() async {
-    final id = widget.businessId;
-    setState(() {
-      _businessId = id;
-      _initialLoading = false;
-    });
-  }
+  /// -------------------------------
+  /// AGREGAR SERVICIO
+  /// -------------------------------
 
-  Future<void> _checkCapacity() async {
+  Future<void> _addService() async {
 
-    if (_selectedServiceId == null ||
-        _businessId == null) return;
-
-    setState(() => _checkingCapacity = true);
-
-    final db = FirebaseFirestore.instance;
-
-    final dateId =
-    DateFormat('yyyy-MM-dd')
-        .format(_selectedDate);
-
-    final availabilityDoc = await db
+    final snap = await FirebaseFirestore.instance
         .collection('businesses')
-        .doc(_businessId)
-        .collection('availability')
-        .doc(dateId)
-        .get();
-
-    final serviceDoc = await db
-        .collection('businesses')
-        .doc(_businessId)
+        .doc(widget.businessId)
         .collection('services')
-        .doc(_selectedServiceId)
+        .where('isActive', isEqualTo: true)
         .get();
 
-    final capacity =
-    serviceDoc['dailyCapacity'];
+    if (snap.docs.isEmpty) return;
 
-    final used =
-        availabilityDoc.data()?[_selectedServiceId] ?? 0;
+    final selected = await showCupertinoModalPopup<DocumentSnapshot>(
+      context: context,
+      builder: (_) {
+        return Container(
+          height: 350,
+          color: CupertinoColors.systemBackground.resolveFrom(context),
+          child: ListView(
+            children: snap.docs.map((doc) {
 
-    setState(() {
-      _isFull = used >= capacity;
-      _checkingCapacity = false;
-    });
+              final data = doc.data() as Map<String, dynamic>;
+
+              return CupertinoButton(
+                child: Text(data['name']),
+                onPressed: () {
+                  Navigator.pop(context, doc);
+                },
+              );
+
+            }).toList(),
+          ),
+        );
+      },
+    );
+
+    if (selected != null) {
+      final data = selected.data() as Map<String, dynamic>;
+
+      setState(() {
+        _services.add(
+          SelectedService(
+            serviceId: selected.id,
+            serviceName: data['name'],
+          ),
+        );
+      });
+    }
   }
+
+  /// -------------------------------
+  /// GUARDAR EVENTO
+  /// -------------------------------
 
   Future<void> _save() async {
 
-    if (_businessId == null) return;
+    if (_clientController.text.isEmpty || _services.isEmpty) return;
 
-    if (_clientController.text.trim().isEmpty ||
-        _locationController.text.trim().isEmpty ||
-        _selectedServiceId == null ||
-        _selectedPackageId == null) {
-      return;
+    final db = FirebaseFirestore.instance;
+
+    final eventData = {
+      'clientName': _clientController.text.trim(),
+      'phone': _phoneController.text.trim(),
+      'locationName': _locationController.text.trim(),
+      'date': DateTime(
+          _selectedDate.year,
+          _selectedDate.month,
+          _selectedDate.day),
+      'totalPrice': totalPrice,
+      'totalPaid': 0,
+      'services': _services.map((s) {
+        return {
+          'serviceId': s.serviceId,
+          'serviceName': s.serviceName,
+          'packageId': s.packageId,
+          'packageName': s.packageName,
+          'basePrice': s.basePrice,
+          'options': s.options,
+          'totalServicePrice': s.totalServicePrice,
+        };
+      }).toList(),
+    };
+
+    final eventRef = await db
+        .collection('businesses')
+        .doc(widget.businessId)
+        .collection('events')
+        .add(eventData);
+
+    /// ACTUALIZAR DISPONIBILIDAD
+    final dateId = DateFormat('yyyy-MM-dd').format(_selectedDate);
+
+    for (var s in _services) {
+
+      final availabilityRef = db
+          .collection('businesses')
+          .doc(widget.businessId)
+          .collection('availability')
+          .doc(dateId);
+
+      await db.runTransaction((tx) async {
+
+        final snap = await tx.get(availabilityRef);
+
+        int count = 0;
+
+        if (snap.exists) {
+          count = snap.data()?[s.serviceId] ?? 0;
+        }
+
+        tx.set(
+          availabilityRef,
+          {s.serviceId: count + 1},
+          SetOptions(merge: true),
+        );
+      });
     }
 
-    final anticipo =
-        double.tryParse(
-            _anticipoController.text) ??
-            0;
-
-    if (anticipo < 500) return;
-
-    setState(() => _loading = true);
-
-    try {
-
-      await _eventService
-          .createEventWithPayment(
-        businessId: _businessId!,
-        date: _selectedDate,
-        serviceId: _selectedServiceId!,
-        totalPrice: _total,
-        firstPayment: anticipo,
-        eventData: {
-          'clientName':
-          _clientController.text.trim(),
-          'phone':
-          _phoneController.text.trim(),
-          'locationName':
-          _locationController.text.trim(),
-          'packageId':
-          _selectedPackageId,
-          'packageName':
-          _selectedPackageName,
-        },
-      );
-
-      Navigator.pop(context);
-
-    } catch (e) {
-      showCupertinoDialog(
-        context: context,
-        builder: (_) =>
-            CupertinoAlertDialog(
-              title:
-              const Text("Sin disponibilidad"),
-              content: const Text(
-                  "Ese servicio está lleno ese día."),
-              actions: [
-                CupertinoDialogAction(
-                  child: const Text("OK"),
-                  onPressed: () =>
-                      Navigator.pop(context),
-                )
-              ],
-            ),
-      );
-    }
-
-    setState(() => _loading = false);
+    Navigator.pop(context);
   }
+
+  /// -------------------------------
+  /// UI
+  /// -------------------------------
 
   @override
   Widget build(BuildContext context) {
 
-    if (_initialLoading) {
-      return const CupertinoPageScaffold(
-        child: Center(
-          child:
-          CupertinoActivityIndicator(),
-        ),
-      );
-    }
-
-    final bg =
-    CupertinoColors.systemGroupedBackground
-        .resolveFrom(context);
-
-    final cardColor =
-    CupertinoColors.secondarySystemGroupedBackground
-        .resolveFrom(context);
-
-    final secondaryText =
-    CupertinoColors.secondaryLabel
-        .resolveFrom(context);
-
     return CupertinoPageScaffold(
-      backgroundColor: bg,
-      navigationBar:
-      const CupertinoNavigationBar(
-        middle:
-        Text("Nuevo Evento"),
+      navigationBar: const CupertinoNavigationBar(
+        middle: Text("Nuevo Evento"),
       ),
       child: SafeArea(
-        child: Form(
-          key: _formKey,
-          child: ListView(
-            padding:
-            const EdgeInsets.fromLTRB(
-                16, 16, 16, 120),
-            children: [
+        child: ListView(
+          padding: const EdgeInsets.all(20),
+          children: [
 
-              _section("Cliente", secondaryText),
+            /// CLIENTE
+            CupertinoTextField(
+              controller: _clientController,
+              placeholder: "Nombre del cliente",
+            ),
 
-              _input(cardColor,
-                  CupertinoTextField(
-                    controller:
-                    _clientController,
-                    placeholder:
-                    "Nombre",
-                  )),
+            const SizedBox(height: 12),
 
-              _input(cardColor,
-                  CupertinoTextField(
-                    controller:
-                    _phoneController,
-                    placeholder:
-                    "Teléfono",
-                    keyboardType:
-                    TextInputType.phone,
-                  )),
+            CupertinoTextField(
+              controller: _phoneController,
+              placeholder: "Teléfono",
+              keyboardType: TextInputType.phone,
+            ),
 
-              _input(cardColor,
-                  CupertinoTextField(
-                    controller:
-                    _locationController,
-                    placeholder:
-                    "Lugar del evento",
-                  )),
+            const SizedBox(height: 20),
 
-              const SizedBox(height: 16),
+            CupertinoTextField(
+              controller: _locationController,
+              placeholder: "Lugar del evento (salón, casa, expo...)",
+            ),
 
-              _section("Evento", secondaryText),
+            const SizedBox(height: 20),
 
-              _row(cardColor,
-                  "Fecha",
-                  DateFormat(
-                      'dd MMM yyyy')
-                      .format(
-                      _selectedDate),
-                  _openDatePicker),
+            /// FECHA
+            CupertinoButton(
+              padding: EdgeInsets.zero,
+              onPressed: () async {
+                final picked = await showCupertinoModalPopup<DateTime>(
+                  context: context,
+                  builder: (_) {
+                    DateTime tempDate = _selectedDate;
+                    return Container(
+                      height: 250,
+                      color: CupertinoColors.systemBackground.resolveFrom(context),
+                      child: Column(
+                        children: [
+                          Expanded(
+                            child: CupertinoDatePicker(
+                              mode: CupertinoDatePickerMode.date,
+                              initialDateTime: _selectedDate,
+                              onDateTimeChanged: (val) {
+                                tempDate = val;
+                              },
+                            ),
+                          ),
+                          CupertinoButton(
+                            child: const Text("Seleccionar"),
+                            onPressed: () {
+                              Navigator.pop(context, tempDate);
+                            },
+                          )
+                        ],
+                      ),
+                    );
+                  },
+                );
 
-              _row(cardColor,
-                  "Servicio",
-                  _selectedServiceName ??
-                      "Seleccionar",
-                  _showServiceSheet),
+                if (picked != null) {
+                  setState(() {
+                    _selectedDate = picked;
+                  });
+                }
+              },
+              child: Text(
+                DateFormat('dd MMM yyyy').format(_selectedDate),
+              ),
+            ),
 
-              if (_selectedServiceId !=
-                  null)
-                Padding(
-                  padding:
-                  const EdgeInsets.only(
-                      top: 6),
-                  child:
-                  _checkingCapacity
-                      ? const CupertinoActivityIndicator()
-                      : Text(
-                    _isFull
-                        ? "Sin disponibilidad"
-                        : "Disponible",
-                    style:
-                    TextStyle(
-                      fontSize:
-                      13,
-                      fontWeight:
-                      FontWeight
-                          .w600,
-                      color:
-                      _isFull
-                          ? CupertinoColors
-                          .systemRed
-                          : CupertinoColors
-                          .systemGreen,
+            const SizedBox(height: 30),
+
+            /// SERVICIOS
+            const Text(
+              "Servicios",
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+
+            const SizedBox(height: 10),
+
+            ..._services.map((s) {
+
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        s.serviceName,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      CupertinoButton(
+                        padding: EdgeInsets.zero,
+                        child: const Icon(CupertinoIcons.delete),
+                        onPressed: () {
+                          setState(() {
+                            _services.remove(s);
+                          });
+                        },
+                      )
+                    ],
+                  ),
+
+                  const SizedBox(height: 8),
+
+                  CupertinoButton(
+                    padding: EdgeInsets.zero,
+                    onPressed: () => _selectPackage(s),
+                    child: Text(
+                      s.packageName == null
+                          ? "Seleccionar paquete"
+                          : "Paquete: ${s.packageName}",
                     ),
                   ),
-                ),
 
-              _row(cardColor,
-                  "Paquete",
-                  _selectedPackageName ??
-                      "Seleccionar",
-                  _showPackageSheet),
-
-              const SizedBox(height: 16),
-
-              _section("Pago", secondaryText),
-
-              _input(cardColor,
-                  CupertinoTextField(
-                    controller:
-                    _anticipoController,
-                    placeholder:
-                    "Anticipo",
-                    keyboardType:
-                    TextInputType.number,
-                  )),
-
-              const SizedBox(height: 8),
-
-              Text(
-                "Total \$${_total.toStringAsFixed(0)}",
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight:
-                  FontWeight.bold,
-                ),
-              ),
-
-              const SizedBox(height: 20),
-
-              CupertinoButton(
-                borderRadius:
-                BorderRadius
-                    .circular(14),
-                color:
-                CupertinoColors
-                    .systemBlue,
-                onPressed:
-                (_loading ||
-                    _isFull ||
-                    _checkingCapacity)
-                    ? null
-                    : _save,
-                child: _loading
-                    ? const CupertinoActivityIndicator(
-                  color:
-                  CupertinoColors
-                      .white,
-                )
-                    : const Text(
-                  "Guardar evento",
-                  style:
-                  TextStyle(
-                    color: Colors.white,
-                    fontWeight:
-                    FontWeight
-                        .w600,
+                  CupertinoButton(
+                    padding: EdgeInsets.zero,
+                    onPressed: () => _selectOptions(s),
+                    child: const Text("Agregar opción extra"),
                   ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 
-  void _openDatePicker() {
-    Navigator.push(
-      context,
-      CupertinoPageRoute(
-        fullscreenDialog: true,
-        builder: (_) =>
-            _FullScreenDatePicker(
-              initialDate:
-              _selectedDate,
-              onDateSelected:
-                  (date) async {
-                setState(() {
-                  _selectedDate = date;
-                  _selectedPackageId =
-                  null;
-                  _selectedPackageName =
-                  null;
-                });
+                  if (s.options.isNotEmpty)
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: s.options.map((o) {
+                        return Text(
+                            "• ${o['name']} (+\$${o['extraCost']})");
+                      }).toList(),
+                    ),
 
-                await _checkCapacity();
-              },
-            ),
-      ),
-    );
-  }
+                  const SizedBox(height: 8),
 
-  void _showServiceSheet() async {
-
-    final snap =
-    await FirebaseFirestore
-        .instance
-        .collection(
-        'businesses')
-        .doc(_businessId)
-        .collection(
-        'services')
-        .where(
-        'isActive',
-        isEqualTo: true)
-        .get();
-
-    showCupertinoModalPopup(
-      context: context,
-      builder: (_) =>
-          CupertinoActionSheet(
-            title:
-            const Text(
-                "Seleccionar servicio"),
-            actions: snap.docs
-                .map((doc) {
-              final data =
-              doc.data();
-              return CupertinoActionSheetAction(
-                child:
-                Text(data['name']),
-                onPressed:
-                    () async {
-                  setState(() {
-                    _selectedServiceId =
-                        doc.id;
-                    _selectedServiceName =
-                    data['name'];
-                    _selectedPackageId =
-                    null;
-                    _selectedPackageName =
-                    null;
-                  });
-
-                  Navigator.pop(
-                      context);
-
-                  await _checkCapacity();
-                },
+                  Text(
+                    "Total servicio: \$${s.totalServicePrice.toStringAsFixed(0)}",
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
               );
-            }).toList(),
-            cancelButton:
-            CupertinoActionSheetAction(
-              isDefaultAction:
-              true,
-              child:
-              const Text(
-                  "Cancelar"),
-              onPressed: () =>
-                  Navigator.pop(
-                      context),
+            }),
+
+            const SizedBox(height: 10),
+
+            CupertinoButton(
+              onPressed: _addService,
+              child: const Text("+ Agregar barra"),
             ),
-          ),
-    );
-  }
 
-  void _showPackageSheet() async {
+            const SizedBox(height: 30),
 
-    if (_selectedServiceId ==
-        null) return;
-
-    final snap =
-    await FirebaseFirestore
-        .instance
-        .collection(
-        'businesses')
-        .doc(_businessId)
-        .collection(
-        'services')
-        .doc(
-        _selectedServiceId)
-        .collection(
-        'packages')
-        .where(
-        'isActive',
-        isEqualTo: true)
-        .get();
-
-    showCupertinoModalPopup(
-      context: context,
-      builder: (_) =>
-          CupertinoActionSheet(
-            title:
-            const Text(
-                "Seleccionar paquete"),
-            actions: snap.docs
-                .map((doc) {
-              final data =
-              doc.data();
-              return CupertinoActionSheetAction(
-                child: Text(
-                    "${data['name']} - \$${data['price']}"),
-                onPressed:
-                    () {
-                  setState(() {
-                    _selectedPackageId =
-                        doc.id;
-                    _selectedPackageName =
-                    data['name'];
-                    _total =
-                        (data['price']
-                        as num)
-                            .toDouble();
-                  });
-
-                  Navigator.pop(
-                      context);
-                },
-              );
-            }).toList(),
-            cancelButton:
-            CupertinoActionSheetAction(
-              isDefaultAction:
-              true,
-              child:
-              const Text(
-                  "Cancelar"),
-              onPressed: () =>
-                  Navigator.pop(
-                      context),
-            ),
-          ),
-    );
-  }
-
-  Widget _section(
-      String text,
-      Color secondaryText) {
-    return Padding(
-      padding:
-      const EdgeInsets.only(
-          bottom: 6),
-      child: Text(
-        text,
-        style: TextStyle(
-          fontSize: 13,
-          fontWeight:
-          FontWeight.w600,
-          color:
-          secondaryText,
-        ),
-      ),
-    );
-  }
-
-  Widget _input(
-      Color cardColor,
-      Widget child) {
-    return Container(
-      margin:
-      const EdgeInsets.only(
-          bottom: 10),
-      padding:
-      const EdgeInsets
-          .symmetric(
-          horizontal: 14,
-          vertical: 10),
-      decoration:
-      BoxDecoration(
-        color: cardColor,
-        borderRadius:
-        BorderRadius.circular(
-            14),
-      ),
-      child: child,
-    );
-  }
-
-  Widget _row(
-      Color cardColor,
-      String label,
-      String value,
-      VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        margin:
-        const EdgeInsets.only(
-            bottom: 10),
-        padding:
-        const EdgeInsets
-            .symmetric(
-            horizontal: 14,
-            vertical: 12),
-        decoration:
-        BoxDecoration(
-          color: cardColor,
-          borderRadius:
-          BorderRadius.circular(
-              14),
-        ),
-        child: Row(
-          mainAxisAlignment:
-          MainAxisAlignment
-              .spaceBetween,
-          children: [
-            Text(label),
+            /// TOTAL GENERAL
             Text(
-              value,
-              style:
-              const TextStyle(
-                color:
-                CupertinoColors
-                    .systemBlue,
-                fontWeight:
-                FontWeight.w600,
+              "Total general: \$${totalPrice.toStringAsFixed(0)}",
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
               ),
+            ),
+
+            const SizedBox(height: 20),
+
+            CupertinoButton.filled(
+              onPressed: _save,
+              child: const Text("Guardar Evento"),
             ),
           ],
         ),
       ),
     );
   }
-}
 
-class _FullScreenDatePicker
-    extends StatefulWidget {
+  Future<void> _selectOptions(SelectedService service) async {
 
-  final DateTime initialDate;
-  final Function(DateTime)
-  onDateSelected;
+    final snap = await FirebaseFirestore.instance
+        .collection('businesses')
+        .doc(widget.businessId)
+        .collection('services')
+        .doc(service.serviceId)
+        .collection('options')
+        .where('isActive', isEqualTo: true)
+        .get();
 
-  const _FullScreenDatePicker({
-    required this.initialDate,
-    required this.onDateSelected,
-  });
+    if (snap.docs.isEmpty) return;
 
-  @override
-  State<_FullScreenDatePicker>
-  createState() =>
-      _FullScreenDatePickerState();
-}
+    await showCupertinoModalPopup(
+      context: context,
+      builder: (_) {
 
-class _FullScreenDatePickerState
-    extends State<
-        _FullScreenDatePicker> {
+        return Container(
+          height: 400,
+          color: CupertinoColors.systemBackground.resolveFrom(context),
+          child: ListView(
+            children: snap.docs.map((doc) {
 
-  late DateTime _tempDate;
+              final data = doc.data() as Map<String, dynamic>;
 
-  @override
-  void initState() {
-    super.initState();
-    _tempDate =
-        widget.initialDate;
+              return CupertinoButton(
+                child: Text(
+                  "${data['name']} • +\$${data['extraCost']}",
+                ),
+                onPressed: () {
+
+                  setState(() {
+                    service.options.add({
+                      'optionId': doc.id,
+                      'name': data['name'],
+                      'extraCost': data['extraCost'],
+                    });
+                  });
+
+                  Navigator.pop(context);
+                },
+              );
+
+            }).toList(),
+          ),
+        );
+      },
+    );
+  }
+  Future<void> _selectPackage(SelectedService service) async {
+
+    final snap = await FirebaseFirestore.instance
+        .collection('businesses')
+        .doc(widget.businessId)
+        .collection('services')
+        .doc(service.serviceId)
+        .collection('packages')
+        .where('isActive', isEqualTo: true)
+        .get();
+
+    if (snap.docs.isEmpty) return;
+
+    final selected = await showCupertinoModalPopup<DocumentSnapshot>(
+      context: context,
+      builder: (_) {
+        return Container(
+          height: 350,
+          color: CupertinoColors.systemBackground.resolveFrom(context),
+          child: ListView(
+            children: snap.docs.map((doc) {
+
+              final data = doc.data() as Map<String, dynamic>;
+
+              return CupertinoButton(
+                child: Text(
+                    "${data['name']} • \$${data['price']}"),
+                onPressed: () {
+                  Navigator.pop(context, doc);
+                },
+              );
+
+            }).toList(),
+          ),
+        );
+      },
+    );
+
+    if (selected != null) {
+      final data = selected.data() as Map<String, dynamic>;
+
+      setState(() {
+        service.packageId = selected.id;
+        service.packageName = data['name'];
+        service.basePrice = (data['price'] as num).toDouble();
+      });
+    }
   }
 
-  @override
-  Widget build(
-      BuildContext context) {
+}
 
-    return CupertinoPageScaffold(
-      navigationBar:
-      CupertinoNavigationBar(
-        middle:
-        const Text(
-            "Seleccionar fecha"),
-        trailing:
-        CupertinoButton(
-          padding:
-          EdgeInsets.zero,
-          child:
-          const Text(
-              "Listo"),
-          onPressed: () {
-            widget
-                .onDateSelected(
-                _tempDate);
-            Navigator.pop(
-                context);
-          },
-        ),
-      ),
-      child: SafeArea(
-        child: Center(
-          child:
-          CupertinoDatePicker(
-            mode:
-            CupertinoDatePickerMode
-                .date,
-            initialDateTime:
-            _tempDate,
-            minimumYear:
-            2023,
-            maximumYear:
-            2035,
-            onDateTimeChanged:
-                (date) {
-              _tempDate =
-                  date;
-            },
-          ),
-        ),
-      ),
-    );
+class SelectedService {
+  String serviceId;
+  String serviceName;
+
+  String? packageId;
+  String? packageName;
+  double basePrice = 0;
+
+  List<Map<String, dynamic>> options = [];
+
+  SelectedService({
+    required this.serviceId,
+    required this.serviceName,
+  });
+
+  double get totalServicePrice {
+    double optionsTotal = 0;
+    for (var o in options) {
+      optionsTotal += (o['extraCost'] ?? 0);
+    }
+    return basePrice + optionsTotal;
   }
 }

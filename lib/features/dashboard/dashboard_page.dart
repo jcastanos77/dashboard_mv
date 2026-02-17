@@ -36,6 +36,7 @@ class _DashboardPageState
 
           navigationBar:
           const CupertinoNavigationBar(
+            transitionBetweenRoutes: false,
             middle: Text(
               "Dashboard",
               style: TextStyle(

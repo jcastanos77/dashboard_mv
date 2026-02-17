@@ -67,6 +67,8 @@ class _HomePageState
                   HapticFeedback
                       .lightImpact();
 
+                  if (!mounted) return;
+
                   setState(() {
                     _currentIndex =
                         index;

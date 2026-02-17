@@ -44,6 +44,7 @@ class _EventDetailPageState extends State<EventDetailPage> {
     return CupertinoPageScaffold(
       backgroundColor: bg,
       navigationBar: CupertinoNavigationBar(
+        transitionBetweenRoutes: false,
         middle: const Text("Detalle Evento"),
         trailing: CupertinoButton(
           padding: EdgeInsets.zero,
@@ -99,7 +100,6 @@ class _EventDetailPageState extends State<EventDetailPage> {
 
             const SizedBox(height: 20),
 
-            /// FINANCIAL CARD
             /// FINANCIAL BLOCK
             Container(
               padding: const EdgeInsets.all(24),
@@ -229,9 +229,9 @@ class _EventDetailPageState extends State<EventDetailPage> {
             CupertinoButton.filled(
               borderRadius: BorderRadius.circular(18),
               onPressed: () {
-                showDialog(
+                showCupertinoModalPopup(
                   context: context,
-                  builder: (_) => AddPaymentDialog(
+                  builder: (_) => AddPaymentSheet(
                     businessId: widget.businessId,
                     eventId: widget.eventId,
                     currentPaid: paid.toDouble(),

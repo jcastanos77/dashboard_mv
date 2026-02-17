@@ -162,6 +162,7 @@ class _EditEventPageState extends State<EditEventPage> {
     return CupertinoPageScaffold(
       backgroundColor: bg,
       navigationBar: const CupertinoNavigationBar(
+        transitionBetweenRoutes: false,
         middle: Text("Editar Evento"),
       ),
       child: SafeArea(

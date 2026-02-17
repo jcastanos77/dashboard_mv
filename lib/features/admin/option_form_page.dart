@@ -1,6 +1,5 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../../core/business_helper.dart';
 import '../../models/option_model.dart';
 
 class OptionFormPage extends StatefulWidget {
@@ -12,7 +11,7 @@ class OptionFormPage extends StatefulWidget {
     super.key,
     required this.serviceId,
     this.optionModel,
-    required this.businessId
+    required this.businessId,
   });
 
   @override
@@ -20,14 +19,10 @@ class OptionFormPage extends StatefulWidget {
       _OptionFormPageState();
 }
 
-class _OptionFormPageState
-    extends State<OptionFormPage> {
-
-  final _formKey = GlobalKey<FormState>();
+class _OptionFormPageState extends State<OptionFormPage> {
 
   final _nameController = TextEditingController();
-  final _extraCostController =
-  TextEditingController();
+  final _extraCostController = TextEditingController();
 
   @override
   void initState() {
@@ -37,26 +32,26 @@ class _OptionFormPageState
       _nameController.text =
           widget.optionModel!.name;
       _extraCostController.text =
-          widget.optionModel!.extraCost
-              .toString();
+          widget.optionModel!.extraCost.toString();
     }
   }
 
-  Future<void> _save(String businessId) async {
+  Future<void> _save() async {
 
-    if (!_formKey.currentState!.validate())
-      return;
+    if (_nameController.text.trim().isEmpty) return;
+
+    final extraCost =
+        double.tryParse(_extraCostController.text) ?? 0;
 
     final data = {
       'name': _nameController.text.trim(),
-      'extraCost':
-      double.parse(_extraCostController.text),
+      'extraCost': extraCost,
       'isActive': true,
     };
 
     final ref = FirebaseFirestore.instance
         .collection('businesses')
-        .doc(businessId)
+        .doc(widget.businessId)
         .collection('services')
         .doc(widget.serviceId)
         .collection('options');
@@ -69,65 +64,123 @@ class _OptionFormPageState
           .update(data);
     }
 
-    Navigator.pop(context);
+    if (mounted) Navigator.pop(context);
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-          appBar: AppBar(
-            title: Text(widget.optionModel == null
-                ? "Nueva Opción"
-                : "Editar Opción"),
-          ),
-          body: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Form(
-              key: _formKey,
+
+    final bg =
+    CupertinoColors.systemGroupedBackground
+        .resolveFrom(context);
+
+    final cardBg =
+    CupertinoColors.secondarySystemGroupedBackground
+        .resolveFrom(context);
+
+    final label =
+    CupertinoColors.label.resolveFrom(context);
+
+    final secondary =
+    CupertinoColors.secondaryLabel
+        .resolveFrom(context);
+
+    final isEditing =
+        widget.optionModel != null;
+
+    return CupertinoPageScaffold(
+      backgroundColor: bg,
+      navigationBar: CupertinoNavigationBar(
+        middle: Text(
+          isEditing ? "Editar Opción" : "Nueva Opción",
+        ),
+      ),
+      child: SafeArea(
+        child: ListView(
+          padding:
+          const EdgeInsets.fromLTRB(16, 20, 16, 40),
+          children: [
+
+            /// CARD FORM
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: cardBg,
+                borderRadius:
+                BorderRadius.circular(22),
+              ),
               child: Column(
+                crossAxisAlignment:
+                CrossAxisAlignment.start,
                 children: [
 
-                  TextFormField(
-                    controller: _nameController,
-                    decoration: const InputDecoration(
-                        labelText: "Nombre"),
-                    validator: (v) =>
-                    v == null || v.isEmpty
-                        ? "Requerido"
-                        : null,
+                  Text(
+                    "Nombre",
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: secondary,
+                    ),
                   ),
 
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 6),
 
-                  TextFormField(
-                    controller: _extraCostController,
-                    keyboardType:
-                    TextInputType.number,
-                    decoration: const InputDecoration(
-                        labelText:
-                        "Costo extra (0 si no aplica)"),
-                    validator: (v) =>
-                    v == null ||
-                        double.tryParse(v) ==
-                            null
-                        ? "Número inválido"
-                        : null,
+                  CupertinoTextField(
+                    controller: _nameController,
+                    placeholder: "Ej. Barra premium",
+                    padding:
+                    const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 14),
+                    decoration: BoxDecoration(
+                      color: CupertinoColors.white,
+                      borderRadius:
+                      BorderRadius.circular(14),
+                    ),
                   ),
 
                   const SizedBox(height: 20),
 
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: () =>
-                          _save(widget.businessId),
-                      child: const Text("Guardar"),
+                  Text(
+                    "Costo extra",
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: secondary,
                     ),
-                  )
+                  ),
+
+                  const SizedBox(height: 6),
+
+                  CupertinoTextField(
+                    controller: _extraCostController,
+                    keyboardType:
+                    TextInputType.number,
+                    placeholder: "0",
+                    padding:
+                    const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 14),
+                    decoration: BoxDecoration(
+                      color: CupertinoColors.white,
+                      borderRadius:
+                      BorderRadius.circular(14),
+                    ),
+                  ),
                 ],
               ),
             ),
-          ),
-        );
+
+            const SizedBox(height: 30),
+
+            /// SAVE BUTTON
+            CupertinoButton.filled(
+              onPressed: _save,
+              borderRadius:
+              BorderRadius.circular(16),
+              child: const Text("Guardar"),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

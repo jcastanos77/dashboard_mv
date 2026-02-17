@@ -1,6 +1,5 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../../core/business_helper.dart';
 import '../../models/package_model.dart';
 import 'package_form_page.dart';
 
@@ -13,7 +12,7 @@ class PackagesPage extends StatefulWidget {
     super.key,
     required this.serviceId,
     required this.serviceName,
-    required this.businessId
+    required this.businessId,
   });
 
   @override
@@ -26,96 +25,166 @@ class _PackagesPageState
 
   @override
   Widget build(BuildContext context) {
-    final businessId = widget.businessId;
-        return Scaffold(
-          appBar: AppBar(
-            title: Text("Paquetes - ${widget.serviceName}"),
-          ),
-          body: StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance
-                .collection('businesses')
-                .doc(businessId)
-                .collection('services')
-                .doc(widget.serviceId)
-                .collection('packages')
-                .snapshots(),
-            builder: (context, snapshot) {
 
-              if (!snapshot.hasData) {
-                return const Center(
-                    child: CircularProgressIndicator());
-              }
+    final bg =
+    CupertinoColors.systemGroupedBackground
+        .resolveFrom(context);
 
-              final packages = snapshot.data!.docs
-                  .map((d) => PackageModel.fromMap(
-                  d.data() as Map<String, dynamic>,
-                  d.id))
-                  .toList();
+    final cardBg =
+    CupertinoColors.secondarySystemGroupedBackground
+        .resolveFrom(context);
 
-              if (packages.isEmpty) {
-                return const Center(
-                    child: Text("No hay paquetes"));
-              }
+    final label =
+    CupertinoColors.label.resolveFrom(context);
 
-              return ListView.builder(
-                itemCount: packages.length,
-                itemBuilder: (context, index) {
+    final secondary =
+    CupertinoColors.secondaryLabel.resolveFrom(context);
 
-                  final package = packages[index];
-
-                  return ListTile(
-                    title: Text(package.name),
-                    subtitle: Text(
-                        "${package.quantity} personas • \$${package.price}"),
-                    trailing: Switch(
-                      value: package.isActive,
-                      onChanged: (val) {
-                        FirebaseFirestore.instance
-                            .collection('businesses')
-                            .doc(businessId)
-                            .collection('services')
-                            .doc(widget.serviceId)
-                            .collection('packages')
-                            .doc(package.id)
-                            .update({'isActive': val});
-                      },
+    return CupertinoPageScaffold(
+      backgroundColor: bg,
+      navigationBar: CupertinoNavigationBar(
+        middle: Text("Paquetes - ${widget.serviceName}"),
+        trailing: CupertinoButton(
+          padding: EdgeInsets.zero,
+          child: const Icon(CupertinoIcons.add),
+          onPressed: () {
+            Navigator.push(
+              context,
+              CupertinoPageRoute(
+                builder: (_) =>
+                    PackageFormPage(
+                      serviceId: widget.serviceId,
+                      businessId: widget.businessId,
                     ),
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) =>
-                              PackageFormPage(
-                                serviceId:
-                                widget.serviceId,
-                                packageModel:
-                                package,
-                                businessId: widget.businessId,
-                              ),
-                        ),
-                      );
-                    },
-                  );
-                },
+              ),
+            );
+          },
+        ),
+      ),
+      child: SafeArea(
+        child: StreamBuilder<QuerySnapshot>(
+          stream: FirebaseFirestore.instance
+              .collection('businesses')
+              .doc(widget.businessId)
+              .collection('services')
+              .doc(widget.serviceId)
+              .collection('packages')
+              .orderBy('quantity')
+              .snapshots(),
+          builder: (context, snapshot) {
+
+            if (!snapshot.hasData) {
+              return const Center(
+                child: CupertinoActivityIndicator(),
               );
-            },
-          ),
-          floatingActionButton: FloatingActionButton(
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) =>
-                      PackageFormPage(
-                        serviceId:
-                        widget.serviceId,
-                        businessId: widget.businessId,
-                      ),
+            }
+
+            final packages = snapshot.data!.docs
+                .map((d) => PackageModel.fromMap(
+                d.data() as Map<String, dynamic>,
+                d.id))
+                .toList();
+
+            if (packages.isEmpty) {
+              return Center(
+                child: Text(
+                  "No hay paquetes",
+                  style: TextStyle(color: secondary),
                 ),
               );
-            },
-            child: const Icon(Icons.add),
-          ),
-        );
+            }
+
+            return ListView.builder(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
+              itemCount: packages.length,
+              itemBuilder: (context, index) {
+
+                final package = packages[index];
+
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 14),
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                    color: cardBg,
+                    borderRadius: BorderRadius.circular(22),
+                  ),
+                  child: Row(
+                    children: [
+
+                      /// INFO
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment:
+                          CrossAxisAlignment.start,
+                          children: [
+
+                            Text(
+                              package.name,
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                color: label,
+                              ),
+                            ),
+
+                            const SizedBox(height: 6),
+
+                            Text(
+                              "${package.quantity} personas • \$${package.price}",
+                              style: TextStyle(
+                                color: secondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      /// SWITCH
+                      CupertinoSwitch(
+                        value: package.isActive,
+                        onChanged: (val) {
+                          FirebaseFirestore.instance
+                              .collection('businesses')
+                              .doc(widget.businessId)
+                              .collection('services')
+                              .doc(widget.serviceId)
+                              .collection('packages')
+                              .doc(package.id)
+                              .update({'isActive': val});
+                        },
+                      ),
+
+                      const SizedBox(width: 8),
+
+                      /// EDIT
+                      CupertinoButton(
+                        padding: EdgeInsets.zero,
+                        child: const Icon(
+                          CupertinoIcons.chevron_right,
+                          size: 18,
+                        ),
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            CupertinoPageRoute(
+                              builder: (_) =>
+                                  PackageFormPage(
+                                    serviceId: widget.serviceId,
+                                    packageModel: package,
+                                    businessId: widget.businessId,
+                                  ),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                );
+              },
+            );
+          },
+        ),
+      ),
+    );
   }
 }

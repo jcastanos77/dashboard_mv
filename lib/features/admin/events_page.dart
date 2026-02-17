@@ -78,6 +78,7 @@ class _EventsPageState extends State<EventsPage> {
       weeklyMap[day] =
           (weeklyMap[day] ?? 0) + 1;
     }
+    if (!mounted) return;
 
     setState(() {
       _events = eventsSnap.docs;
@@ -106,6 +107,7 @@ class _EventsPageState extends State<EventsPage> {
     return CupertinoPageScaffold(
       backgroundColor: bg,
       navigationBar: CupertinoNavigationBar(
+        transitionBetweenRoutes: false,
         middle: const Text(
           "Próximos Eventos",
           style: TextStyle(fontWeight: FontWeight.w600),

@@ -18,6 +18,8 @@ class _LoginPageState extends State<LoginPage> {
   String? _error;
 
   Future<void> _login() async {
+    if (!mounted) return;
+
     setState(() {
       _loading = true;
       _error = null;
@@ -34,12 +36,16 @@ class _LoginPageState extends State<LoginPage> {
       });
     }
 
+    if (!mounted) return;
+
     setState(() {
       _loading = false;
     });
   }
 
   Future<void> _register() async {
+    if (!mounted) return;
+
     setState(() {
       _loading = true;
       _error = null;

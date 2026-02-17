@@ -1,7 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../../core/business_helper.dart';
 import '../../models/service_model.dart';
 import 'options_page.dart';
 import 'packages_page.dart';
@@ -33,6 +32,7 @@ class _ServicesPageState
 
           navigationBar:
           CupertinoNavigationBar(
+            transitionBetweenRoutes: false,
             middle: const Text(
               "Servicios",
               style: TextStyle(
@@ -115,118 +115,140 @@ class _ServicesPageState
                     final service =
                     services[index];
 
-                    return Container(
-                      margin:
-                      const EdgeInsets
-                          .only(
-                          bottom:
-                          14),
-                      padding:
-                      const EdgeInsets
-                          .all(16),
-                      decoration:
-                      BoxDecoration(
-                        color:
-                        CupertinoColors
-                            .white,
-                        borderRadius:
-                        BorderRadius
-                            .circular(
-                            20),
+                    return Dismissible(
+                      key: Key(service.id),
+                      direction: DismissDirection.endToStart,
+                      background: Container(
+                        alignment: Alignment.centerRight,
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        decoration: BoxDecoration(
+                          color: CupertinoColors.systemRed,
+                          borderRadius: BorderRadius.circular(22),
+                        ),
+                        child: const Icon(
+                          CupertinoIcons.delete,
+                          color: CupertinoColors.white,
+                        ),
                       ),
-                      child: Column(
-                        crossAxisAlignment:
-                        CrossAxisAlignment
-                            .start,
-                        children: [
+                      confirmDismiss: (_) async {
+                        return await _confirmDelete(service.name);
+                      },
+                      onDismissed: (_) async {
+                        await _deleteService(service.id);
+                      },
+                      child:Container(
+                        margin:
+                        const EdgeInsets
+                            .only(
+                            bottom:
+                            14),
+                        padding:
+                        const EdgeInsets
+                            .all(16),
+                        decoration:
+                        BoxDecoration(
+                          color:
+                          CupertinoColors
+                              .white,
+                          borderRadius:
+                          BorderRadius
+                              .circular(
+                              20),
+                        ),
+                        child: Column(
+                          crossAxisAlignment:
+                          CrossAxisAlignment
+                              .start,
+                          children: [
 
-                          Row(
-                            mainAxisAlignment:
-                            MainAxisAlignment
-                                .spaceBetween,
-                            children: [
+                            Row(
+                              mainAxisAlignment:
+                              MainAxisAlignment
+                                  .spaceBetween,
+                              children: [
 
-                              Column(
-                                crossAxisAlignment:
-                                CrossAxisAlignment
-                                    .start,
-                                children: [
+                                Column(
+                                  crossAxisAlignment:
+                                  CrossAxisAlignment
+                                      .start,
+                                  children: [
 
-                                  Text(
-                                    service
-                                        .name,
-                                    style:
-                                    const TextStyle(
-                                      fontSize:
-                                      17,
-                                      fontWeight:
-                                      FontWeight
-                                          .w600,
+                                    Text(
+                                      service
+                                          .name,
+                                      style:
+                                      const TextStyle(
+                                        fontSize:
+                                        17,
+                                        fontWeight:
+                                        FontWeight
+                                            .w600,
+                                      ),
                                     ),
-                                  ),
 
-                                  const SizedBox(
-                                      height:
-                                      4),
+                                    const SizedBox(
+                                        height:
+                                        4),
 
-                                  Text(
-                                    "Capacidad diaria: ${service.dailyCapacity}",
-                                    style:
-                                    const TextStyle(
-                                      color:
-                                      CupertinoColors
-                                          .inactiveGray,
+                                    Text(
+                                      "Capacidad diaria: ${service.dailyCapacity}",
+                                      style:
+                                      const TextStyle(
+                                        color:
+                                        CupertinoColors
+                                            .inactiveGray,
+                                      ),
                                     ),
-                                  ),
-                                ],
-                              ),
+                                  ],
+                                ),
 
-                              CupertinoSwitch(
-                                value:
-                                service
-                                    .isActive,
-                                onChanged:
-                                    (val) {
-                                  FirebaseFirestore
-                                      .instance
-                                      .collection(
-                                      'businesses')
-                                      .doc(
-                                      businessId)
-                                      .collection(
-                                      'services')
-                                      .doc(service
-                                      .id)
-                                      .update({
-                                    'isActive':
-                                    val
-                                  });
-                                },
-                              ),
-                            ],
-                          ),
-
-                          const SizedBox(
-                              height: 12),
-
-                          CupertinoButton(
-                            padding:
-                            EdgeInsets.zero,
-                            child: const Text(
-                              "Administrar",
-                              style: TextStyle(
-                                color:
-                                CupertinoColors
-                                    .systemBlue,
-                              ),
+                                CupertinoSwitch(
+                                  value:
+                                  service
+                                      .isActive,
+                                  onChanged:
+                                      (val) {
+                                    FirebaseFirestore
+                                        .instance
+                                        .collection(
+                                        'businesses')
+                                        .doc(
+                                        businessId)
+                                        .collection(
+                                        'services')
+                                        .doc(service
+                                        .id)
+                                        .update({
+                                      'isActive':
+                                      val
+                                    });
+                                  },
+                                ),
+                              ],
                             ),
-                            onPressed: () {
-                              _showActions(
-                                  context,
-                                  service);
-                            },
-                          ),
-                        ],
+
+                            const SizedBox(
+                                height: 12),
+
+                            CupertinoButton(
+                              padding:
+                              EdgeInsets.zero,
+                              child: const Text(
+                                "Administrar",
+                                style: TextStyle(
+                                  color:
+                                  CupertinoColors
+                                      .systemBlue,
+                                ),
+                              ),
+                              onPressed: () {
+                                _showActions(
+                                    context,
+                                    service);
+                              },
+                            ),
+                          ],
+                        ),
                       ),
                     );
                   },
@@ -235,6 +257,36 @@ class _ServicesPageState
             ),
           ),
         );
+  }
+
+  Future<bool?> _confirmDelete(String name) {
+    return showCupertinoDialog(
+      context: context,
+      builder: (_) => CupertinoAlertDialog(
+        title: const Text("Eliminar servicio"),
+        content: Text("¿Seguro que quieres eliminar \"$name\"?"),
+        actions: [
+          CupertinoDialogAction(
+            child: const Text("Cancelar"),
+            onPressed: () => Navigator.pop(context, false),
+          ),
+          CupertinoDialogAction(
+            isDestructiveAction: true,
+            child: const Text("Eliminar"),
+            onPressed: () => Navigator.pop(context, true),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _deleteService(String id) async {
+    await FirebaseFirestore.instance
+        .collection('businesses')
+        .doc(widget.businessId)
+        .collection('services')
+        .doc(id)
+        .delete();
   }
 
   void _showActions(

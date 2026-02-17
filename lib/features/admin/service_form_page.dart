@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../models/service_model.dart';
 
@@ -6,7 +6,11 @@ class ServiceFormPage extends StatefulWidget {
   final ServiceModel? service;
   final String businessId;
 
-  const ServiceFormPage({super.key, this.service, required this.businessId});
+  const ServiceFormPage({
+    super.key,
+    this.service,
+    required this.businessId,
+  });
 
   @override
   State<ServiceFormPage> createState() =>
@@ -21,6 +25,8 @@ class _ServiceFormPageState
   final _nameController = TextEditingController();
   final _capacityController = TextEditingController();
 
+  bool _loading = false;
+
   @override
   void initState() {
     super.initState();
@@ -32,9 +38,11 @@ class _ServiceFormPageState
     }
   }
 
-  Future<void> _save(String businessId) async {
+  Future<void> _save() async {
 
     if (!_formKey.currentState!.validate()) return;
+
+    setState(() => _loading = true);
 
     final name = _nameController.text.trim();
     final capacity =
@@ -48,7 +56,7 @@ class _ServiceFormPageState
 
     final ref = FirebaseFirestore.instance
         .collection('businesses')
-        .doc(businessId)
+        .doc(widget.businessId)
         .collection('services');
 
     if (widget.service == null) {
@@ -57,70 +65,115 @@ class _ServiceFormPageState
       await ref.doc(widget.service!.id).update(data);
     }
 
+    if (!mounted) return;
     Navigator.pop(context);
   }
 
   @override
   Widget build(BuildContext context) {
-    final businessId = widget.businessId;
 
-     return Scaffold(
-          appBar: AppBar(
-            title: Text(widget.service == null
-                ? "Nuevo Servicio"
-                : "Editar Servicio"),
-          ),
-          body: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                children: [
+    final bg =
+    CupertinoColors.systemGroupedBackground
+        .resolveFrom(context);
 
-                  TextFormField(
-                    controller: _nameController,
-                    decoration: const InputDecoration(
-                        labelText: "Nombre"),
-                    validator: (v) =>
-                    v == null || v.isEmpty
-                        ? "Requerido"
-                        : null,
+    final cardBg =
+    CupertinoColors.secondarySystemGroupedBackground
+        .resolveFrom(context);
+
+    final label =
+    CupertinoColors.label.resolveFrom(context);
+
+    final secondary =
+    CupertinoColors.secondaryLabel.resolveFrom(context);
+
+    return CupertinoPageScaffold(
+      backgroundColor: bg,
+      navigationBar: CupertinoNavigationBar(
+        middle: Text(
+          widget.service == null
+              ? "Nuevo Servicio"
+              : "Editar Servicio",
+        ),
+      ),
+      child: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              children: [
+
+                /// CARD FORM
+                Container(
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                    color: cardBg,
+                    borderRadius: BorderRadius.circular(20),
                   ),
+                  child: Column(
+                    children: [
 
-                  const SizedBox(height: 12),
+                      /// NAME
+                      CupertinoTextFormFieldRow(
+                        controller: _nameController,
+                        placeholder: "Nombre del servicio",
+                        style: TextStyle(color: label),
+                        validator: (v) =>
+                        v == null || v.isEmpty
+                            ? "Requerido"
+                            : null,
+                      ),
 
-                  TextFormField(
-                    controller: _capacityController,
-                    keyboardType:
-                    TextInputType.number,
-                    decoration: const InputDecoration(
-                        labelText:
-                        "Capacidad diaria"),
-                    validator: (v) {
-                      if (v == null || v.isEmpty) {
-                        return "Requerido";
-                      }
-                      if (int.tryParse(v) == null) {
-                        return "Número inválido";
-                      }
-                      return null;
-                    },
+                      const SizedBox(height: 16),
+
+                      /// CAPACITY
+                      CupertinoTextFormFieldRow(
+                        controller: _capacityController,
+                        placeholder: "Capacidad diaria",
+                        keyboardType: TextInputType.number,
+                        style: TextStyle(color: label),
+                        validator: (v) {
+                          if (v == null || v.isEmpty) {
+                            return "Requerido";
+                          }
+                          if (int.tryParse(v) == null) {
+                            return "Número inválido";
+                          }
+                          return null;
+                        },
+                      ),
+
+                      const SizedBox(height: 6),
+
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          "Cuántos eventos puedes cubrir ese día",
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: secondary,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
+                ),
 
-                  const SizedBox(height: 20),
+                const SizedBox(height: 30),
 
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: () =>
-                          _save(businessId),
-                      child: const Text("Guardar"),
-                    ),
-                  )
-                ],
-              ),
+                /// SAVE BUTTON
+                CupertinoButton.filled(
+                  onPressed: _loading ? null : _save,
+                  child: _loading
+                      ? const CupertinoActivityIndicator(
+                      color: CupertinoColors.white)
+                      : const Text("Guardar"),
+                ),
+              ],
             ),
           ),
-        );
+        ),
+      ),
+    );
   }
 }

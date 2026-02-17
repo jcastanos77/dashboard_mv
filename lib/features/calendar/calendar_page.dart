@@ -57,6 +57,8 @@ class _CalendarPageState extends State<CalendarPage> {
                     isSameDay(_selectedDay, day),
 
                 onDaySelected: (selectedDay, focusedDay) {
+                  if (!mounted) return;
+
                   setState(() {
                     _selectedDay = selectedDay;
                     _focusedDay = focusedDay;

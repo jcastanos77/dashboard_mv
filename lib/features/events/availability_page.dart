@@ -103,6 +103,7 @@ class _AvailabilityPageState
             MapEntry(key, (value as num).toInt()),
       );
     }
+    if (!mounted) return;
 
     setState(() {
       _events = eventsSnap.docs;
@@ -122,6 +123,7 @@ class _AvailabilityPageState
 
       navigationBar:
       CupertinoNavigationBar(
+        transitionBetweenRoutes: false,
         middle: const Text(
           "Disponibilidad",
           style: TextStyle(
@@ -600,6 +602,7 @@ class _FullScreenDatePickerState
     return CupertinoPageScaffold(
       navigationBar:
       CupertinoNavigationBar(
+        transitionBetweenRoutes: false,
         middle: const Text(
             "Seleccionar fecha"),
         trailing: CupertinoButton(

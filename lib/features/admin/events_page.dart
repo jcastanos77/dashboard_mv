@@ -250,6 +250,8 @@ class _EventsPageState extends State<EventsPage> {
                   final date =
                   (data['date'] as Timestamp).toDate();
 
+                  final services = (data['services'] ?? []) as List;
+
                   return GestureDetector(
                       onTap: () {
                         Navigator.push(
@@ -275,7 +277,7 @@ class _EventsPageState extends State<EventsPage> {
                       children: [
 
                         Text(
-                          data['clientName'],
+                          data['clientName'] ?? '',
                           style: TextStyle(
                             fontSize: 17,
                             fontWeight: FontWeight.w600,
@@ -286,22 +288,33 @@ class _EventsPageState extends State<EventsPage> {
                         const SizedBox(height: 6),
 
                         Text(
-                          DateFormat('dd MMM yyyy')
-                              .format(date),
+                          DateFormat('dd MMM yyyy').format(date),
                           style: TextStyle(color: secondary),
                         ),
 
                         const SizedBox(height: 6),
 
-                        Text(
-                          "📍 ${data['locationName'] ?? ''}",
-                          style: TextStyle(color: secondary),
-                        ),
+                        if ((data['locationName'] ?? '').isNotEmpty)
+                          Text(
+                            "📍 ${data['locationName']}",
+                            style: TextStyle(color: secondary),
+                          ),
 
-                        Text(
-                          "🛠 ${data['packageName'] ?? ''}",
-                          style: TextStyle(color: secondary),
-                        ),
+                        const SizedBox(height: 6),
+
+                        /// 🔥 SERVICIOS CONTRATADOS
+                        ...services.map((service) {
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 4),
+                            child: Text(
+                              "🎪 ${service['serviceName']}  •  ${service['packageName']}",
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: label,
+                              ),
+                            ),
+                          );
+                        }).toList(),
 
                         const SizedBox(height: 12),
 

@@ -1,13 +1,41 @@
 import 'package:flutter/cupertino.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
-class SettingsPage extends StatelessWidget {
+class SettingsPage extends StatefulWidget {
   final String businessId;
 
   const SettingsPage({
     super.key,
     required this.businessId,
   });
+
+  @override
+  State<SettingsPage> createState() => _SettingsPageState();
+}
+
+class _SettingsPageState extends State<SettingsPage> {
+
+  String? businessName;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBusiness();
+  }
+
+  Future<void> _loadBusiness() async {
+    final snap = await FirebaseFirestore.instance
+        .collection('businesses')
+        .doc(widget.businessId)
+        .get();
+
+    if (!mounted) return;
+
+    setState(() {
+      businessName = snap.data()?['name'] ?? 'Negocio';
+    });
+  }
 
   Future<void> _logout(BuildContext context) async {
     showCupertinoDialog(
@@ -59,6 +87,29 @@ class SettingsPage extends StatelessWidget {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 10, 20, 40),
           children: [
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: cardBg,
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: Column(
+                children: [
+                  const Icon(
+                    CupertinoIcons.building_2_fill,
+                    size: 40,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    businessName ?? "",
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
 
             /// CUENTA
             _sectionTitle("Cuenta"),
@@ -78,9 +129,10 @@ class SettingsPage extends StatelessWidget {
 
                   _settingsTile(
                     icon: CupertinoIcons.building_2_fill,
-                    title: "ID Negocio",
-                    subtitle: businessId,
+                    title: "Negocio",
+                    subtitle: businessName ?? "Cargando...",
                   ),
+
                 ],
               ),
             ),

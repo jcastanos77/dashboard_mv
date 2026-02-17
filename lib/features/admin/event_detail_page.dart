@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/add_payment_dialog.dart';
+import '../events/create_event_page.dart';
 import '../events/edit_event_page.dart';
 
 class EventDetailPage extends StatefulWidget {
@@ -53,9 +54,9 @@ class _EventDetailPageState extends State<EventDetailPage> {
             Navigator.push(
               context,
               CupertinoPageRoute(
-                builder: (_) => EditEventPage(
+                builder: (_) => CreateEventPage(
                   eventId: widget.eventId,
-                  eventData: widget.eventData,
+                  initialData: widget.eventData,
                   businessId: widget.businessId,
                 ),
               ),
@@ -99,6 +100,50 @@ class _EventDetailPageState extends State<EventDetailPage> {
             ),
 
             const SizedBox(height: 20),
+
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: cardBg,
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+
+                  if ((data['locationName'] ?? '').isNotEmpty) ...[
+                    Row(
+                      children: [
+                        const Icon(CupertinoIcons.location_solid, size: 18),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            data['locationName'],
+                            style: TextStyle(color: label),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+
+                  if ((data['phone'] ?? '').isNotEmpty)
+                    Row(
+                      children: [
+                        const Icon(CupertinoIcons.phone_fill, size: 18),
+                        const SizedBox(width: 8),
+                        Text(
+                          data['phone'],
+                          style: TextStyle(color: label),
+                        ),
+                      ],
+                    ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
 
             /// FINANCIAL BLOCK
             Container(

@@ -49,6 +49,19 @@ dev_dependencies:
   flutter_slidable: ^3.1.0
   flutter_local_notifications: ^17.0.0
   url_launcher: ^6.2.5
+  flutter_launcher_icons: ^0.13.1
+
+flutter_icons:
+  android: true
+  ios: true
+  image_path: "assets/icon/logo.png"
+
+  web:
+    generate: true
+    image_path: "assets/icon/logo.png"
+    background_color: "#ffffff"
+    theme_color: "#ffffff"
+
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
 

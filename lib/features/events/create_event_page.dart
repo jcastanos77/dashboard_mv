@@ -4,8 +4,17 @@ import 'package:intl/intl.dart';
 
 class CreateEventPage extends StatefulWidget {
   final String businessId;
+  final String? eventId;
+  final Map<String, dynamic>? initialData;
 
-  const CreateEventPage({super.key, required this.businessId});
+  const CreateEventPage({
+    super.key,
+    required this.businessId,
+    this.eventId,
+    this.initialData,
+  });
+
+  bool get isEditing => eventId != null;
 
   @override
   State<CreateEventPage> createState() => _CreateEventPageState();
@@ -153,6 +162,77 @@ class _CreateEventPageState extends State<CreateEventPage> {
     Navigator.pop(context);
   }
 
+  Future<void> _updateEvent() async {
+    final db = FirebaseFirestore.instance;
+
+    final eventRef = db
+        .collection('businesses')
+        .doc(widget.businessId)
+        .collection('events')
+        .doc(widget.eventId);
+
+    await eventRef.update({
+      'clientName': _clientController.text.trim(),
+      'phone': _phoneController.text.trim(),
+      'locationName': _locationController.text.trim(),
+      'date': DateTime(
+        _selectedDate.year,
+        _selectedDate.month,
+        _selectedDate.day,
+      ),
+      'services': _services.map((s) {
+        return {
+          'serviceId': s.serviceId,
+          'serviceName': s.serviceName,
+          'packageId': s.packageId,
+          'packageName': s.packageName,
+          'basePrice': s.basePrice,
+          'options': s.options,
+          'totalServicePrice': s.totalServicePrice,
+        };
+      }).toList(),
+      'totalPrice': totalPrice,
+    });
+
+    Navigator.pop(context);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+
+    if (widget.isEditing && widget.initialData != null) {
+      final data = widget.initialData!;
+
+      _clientController.text = data['clientName'] ?? '';
+      _phoneController.text = data['phone'] ?? '';
+      _locationController.text = data['locationName'] ?? '';
+
+      _selectedDate = (data['date'] as Timestamp).toDate();
+
+      final services = List<Map<String, dynamic>>.from(
+        data['services'] ?? [],
+      );
+
+      _services = services.map((s) {
+        final service = SelectedService(
+          serviceId: s['serviceId'],
+          serviceName: s['serviceName'],
+        );
+
+        service.packageId = s['packageId'];
+        service.packageName = s['packageName'];
+        service.basePrice =
+            (s['basePrice'] as num?)?.toDouble() ?? 0;
+
+        service.options =
+        List<Map<String, dynamic>>.from(s['options'] ?? []);
+
+        return service;
+      }).toList();
+    }
+  }
+
   /// -------------------------------
   /// UI
   /// -------------------------------
@@ -161,8 +241,8 @@ class _CreateEventPageState extends State<CreateEventPage> {
   Widget build(BuildContext context) {
 
     return CupertinoPageScaffold(
-      navigationBar: const CupertinoNavigationBar(
-        middle: Text("Nuevo Evento"),
+      navigationBar: CupertinoNavigationBar(
+        middle: Text(widget.isEditing ? "Editar Evento" : "Nuevo Evento"),
       ),
       child: SafeArea(
         child: ListView(
@@ -333,9 +413,10 @@ class _CreateEventPageState extends State<CreateEventPage> {
 
             const SizedBox(height: 20),
 
+
             CupertinoButton.filled(
-              onPressed: _save,
-              child: const Text("Guardar Evento"),
+              onPressed: widget.isEditing ? _updateEvent : _save,
+              child: Text(widget.isEditing ? "Guardar Cambios" : "Crear Evento"),
             ),
           ],
         ),

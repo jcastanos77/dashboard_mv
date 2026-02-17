@@ -1,17 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../../core/business_helper.dart';
 import '../../models/option_model.dart';
 import 'option_form_page.dart';
 
 class OptionsPage extends StatefulWidget {
   final String serviceId;
   final String serviceName;
+  final String businessId;
 
   const OptionsPage({
     super.key,
     required this.serviceId,
     required this.serviceName,
+    required this.businessId
   });
 
   @override
@@ -21,36 +22,16 @@ class OptionsPage extends StatefulWidget {
 
 class _OptionsPageState extends State<OptionsPage> {
 
-  late Future<String> _businessFuture;
-
-  @override
-  void initState() {
-    super.initState();
-    _businessFuture = getBusinessId();
-  }
-
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<String>(
-      future: _businessFuture,
-      builder: (context, snapshot) {
-
-        if (!snapshot.hasData) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
-        }
-
-        final businessId = snapshot.data!;
-
-        return Scaffold(
+    return Scaffold(
           appBar: AppBar(
             title: Text("Opciones - ${widget.serviceName}"),
           ),
           body: StreamBuilder<QuerySnapshot>(
             stream: FirebaseFirestore.instance
                 .collection('businesses')
-                .doc(businessId)
+                .doc(widget.businessId)
                 .collection('services')
                 .doc(widget.serviceId)
                 .collection('options')
@@ -88,7 +69,7 @@ class _OptionsPageState extends State<OptionsPage> {
                       onChanged: (val) {
                         FirebaseFirestore.instance
                             .collection('businesses')
-                            .doc(businessId)
+                            .doc(widget.businessId)
                             .collection('services')
                             .doc(widget.serviceId)
                             .collection('options')
@@ -106,6 +87,7 @@ class _OptionsPageState extends State<OptionsPage> {
                                 widget.serviceId,
                                 optionModel:
                                 option,
+                                businessId: widget.businessId,
                               ),
                         ),
                       );
@@ -124,6 +106,7 @@ class _OptionsPageState extends State<OptionsPage> {
                       OptionFormPage(
                         serviceId:
                         widget.serviceId,
+                        businessId: widget.businessId,
                       ),
                 ),
               );
@@ -131,7 +114,5 @@ class _OptionsPageState extends State<OptionsPage> {
             child: const Icon(Icons.add),
           ),
         );
-      },
-    );
   }
 }

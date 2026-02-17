@@ -7,11 +7,13 @@ import 'package_form_page.dart';
 class PackagesPage extends StatefulWidget {
   final String serviceId;
   final String serviceName;
+  final String businessId;
 
   const PackagesPage({
     super.key,
     required this.serviceId,
     required this.serviceName,
+    required this.businessId
   });
 
   @override
@@ -22,28 +24,9 @@ class PackagesPage extends StatefulWidget {
 class _PackagesPageState
     extends State<PackagesPage> {
 
-  late Future<String> _businessFuture;
-
-  @override
-  void initState() {
-    super.initState();
-    _businessFuture = getBusinessId();
-  }
-
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<String>(
-      future: _businessFuture,
-      builder: (context, snapshot) {
-
-        if (!snapshot.hasData) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
-        }
-
-        final businessId = snapshot.data!;
-
+    final businessId = widget.businessId;
         return Scaffold(
           appBar: AppBar(
             title: Text("Paquetes - ${widget.serviceName}"),
@@ -107,6 +90,7 @@ class _PackagesPageState
                                 widget.serviceId,
                                 packageModel:
                                 package,
+                                businessId: widget.businessId,
                               ),
                         ),
                       );
@@ -125,6 +109,7 @@ class _PackagesPageState
                       PackageFormPage(
                         serviceId:
                         widget.serviceId,
+                        businessId: widget.businessId,
                       ),
                 ),
               );
@@ -132,7 +117,5 @@ class _PackagesPageState
             child: const Icon(Icons.add),
           ),
         );
-      },
-    );
   }
 }

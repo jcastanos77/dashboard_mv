@@ -6,11 +6,13 @@ import '../../models/package_model.dart';
 class PackageFormPage extends StatefulWidget {
   final String serviceId;
   final PackageModel? packageModel;
+  final String businessId;
 
   const PackageFormPage({
     super.key,
     required this.serviceId,
     this.packageModel,
+    required this.businessId
   });
 
   @override
@@ -29,12 +31,9 @@ class _PackageFormPageState
   final _priceController =
   TextEditingController();
 
-  late Future<String> _businessFuture;
-
   @override
   void initState() {
     super.initState();
-    _businessFuture = getBusinessId();
 
     if (widget.packageModel != null) {
       _nameController.text =
@@ -82,19 +81,8 @@ class _PackageFormPageState
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<String>(
-      future: _businessFuture,
-      builder: (context, snapshot) {
-
-        if (!snapshot.hasData) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
-        }
-
-        final businessId = snapshot.data!;
-
-        return Scaffold(
+    final businessId = widget.businessId;
+    return Scaffold(
           appBar: AppBar(
             title: Text(widget.packageModel == null
                 ? "Nuevo Paquete"
@@ -165,7 +153,5 @@ class _PackageFormPageState
             ),
           ),
         );
-      },
-    );
   }
 }

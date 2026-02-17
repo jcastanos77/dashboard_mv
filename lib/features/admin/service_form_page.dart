@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../../core/business_helper.dart';
 import '../../models/service_model.dart';
 
 class ServiceFormPage extends StatefulWidget {
   final ServiceModel? service;
+  final String businessId;
 
-  const ServiceFormPage({super.key, this.service});
+  const ServiceFormPage({super.key, this.service, required this.businessId});
 
   @override
   State<ServiceFormPage> createState() =>
@@ -21,12 +21,9 @@ class _ServiceFormPageState
   final _nameController = TextEditingController();
   final _capacityController = TextEditingController();
 
-  late Future<String> _businessFuture;
-
   @override
   void initState() {
     super.initState();
-    _businessFuture = getBusinessId();
 
     if (widget.service != null) {
       _nameController.text = widget.service!.name;
@@ -65,19 +62,9 @@ class _ServiceFormPageState
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<String>(
-      future: _businessFuture,
-      builder: (context, snapshot) {
+    final businessId = widget.businessId;
 
-        if (!snapshot.hasData) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
-        }
-
-        final businessId = snapshot.data!;
-
-        return Scaffold(
+     return Scaffold(
           appBar: AppBar(
             title: Text(widget.service == null
                 ? "Nuevo Servicio"
@@ -135,7 +122,5 @@ class _ServiceFormPageState
             ),
           ),
         );
-      },
-    );
   }
 }

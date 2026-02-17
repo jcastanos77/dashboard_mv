@@ -6,7 +6,8 @@ import '../../core/business_helper.dart';
 import '../events/create_event_page.dart';
 
 class AvailabilityPage extends StatefulWidget {
-  const AvailabilityPage({super.key});
+  final String businessId;
+  const AvailabilityPage({super.key, required this.businessId});
 
   @override
   State<AvailabilityPage> createState() =>
@@ -34,7 +35,7 @@ class _AvailabilityPageState
 
     setState(() => _loading = true);
 
-    final businessId = await getBusinessId();
+    final businessId = widget.businessId;
 
     if (businessId == null) {
       return;
@@ -136,7 +137,7 @@ class _AvailabilityPageState
               context,
               CupertinoPageRoute(
                 builder: (_) =>
-                const CreateEventPage(),
+                 CreateEventPage(businessId: widget.businessId,),
               ),
             );
             _loadData();

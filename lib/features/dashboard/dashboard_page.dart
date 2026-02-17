@@ -4,7 +4,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../core/business_helper.dart';
 
 class DashboardPage extends StatefulWidget {
-  const DashboardPage({super.key});
+  final String businessId;
+  const DashboardPage({super.key, required this.businessId});
 
   @override
   State<DashboardPage> createState() =>
@@ -14,31 +15,9 @@ class DashboardPage extends StatefulWidget {
 class _DashboardPageState
     extends State<DashboardPage> {
 
-  late Future<String> _businessFuture;
-
-  @override
-  void initState() {
-    super.initState();
-    _businessFuture = getBusinessId();
-  }
-
   @override
   Widget build(BuildContext context) {
-
-    return FutureBuilder<String>(
-      future: _businessFuture,
-      builder: (context, snapshot) {
-
-        if (!snapshot.hasData) {
-          return const CupertinoPageScaffold(
-            child: Center(
-              child:
-              CupertinoActivityIndicator(),
-            ),
-          );
-        }
-
-        final businessId = snapshot.data!;
+    final businessId = widget.businessId;
 
         final now = DateTime.now();
         final startMonth =
@@ -204,8 +183,6 @@ class _DashboardPageState
             ),
           ),
         );
-      },
-    );
   }
 
   Widget _sectionTitle(String text) {

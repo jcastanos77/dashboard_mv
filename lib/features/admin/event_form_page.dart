@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
-import '../../core/business_helper.dart';
 import '../../models/service_model.dart';
 import '../../models/package_model.dart';
 import '../../models/option_model.dart';
 
 class EventFormPage extends StatefulWidget {
-  const EventFormPage({super.key});
+  final String businessId;
+
+  const EventFormPage({
+    super.key,
+    required this.businessId
+  });
 
   @override
   State<EventFormPage> createState() =>
@@ -32,8 +36,6 @@ class _EventFormPageState
 
   double _total = 0;
 
-  late Future<String> _businessFuture;
-
   int _availableSpots = -1;
   bool _isCheckingAvailability = false;
 
@@ -41,7 +43,6 @@ class _EventFormPageState
   @override
   void initState() {
     super.initState();
-    _businessFuture = getBusinessId();
   }
 
   void _calculateTotal() {
@@ -235,23 +236,12 @@ class _EventFormPageState
     });
   }
 
-
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<String>(
-      future: _businessFuture,
-      builder: (context, snapshot) {
 
-        if (!snapshot.hasData) {
-          return const Scaffold(
-            body:
-            Center(child: CircularProgressIndicator()),
-          );
-        }
+    final businessId = widget.businessId;
 
-        final businessId = snapshot.data!;
-
-        return Scaffold(
+    return Scaffold(
           appBar: AppBar(
             title: const Text("Nuevo Evento"),
           ),
@@ -585,7 +575,5 @@ class _EventFormPageState
             ),
           ),
         );
-      },
-    );
-  }
+      }
 }

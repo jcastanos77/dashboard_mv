@@ -5,7 +5,12 @@ import '../../core/business_helper.dart';
 import '../events/create_event_page.dart';
 
 class EventsPage extends StatefulWidget {
-  const EventsPage({super.key});
+  final String businessId;
+
+  const EventsPage({
+    super.key,
+    required this.businessId,
+  });
 
   @override
   State<EventsPage> createState() => _EventsPageState();
@@ -32,11 +37,7 @@ class _EventsPageState extends State<EventsPage> {
 
   Future<void> _loadData() async {
 
-    final businessId = await getBusinessId();
-
-    if (businessId == null) {
-      return;
-    }
+    final businessId = widget.businessId;
 
     final today = DateTime.now();
     final startToday =
@@ -115,7 +116,7 @@ class _EventsPageState extends State<EventsPage> {
             await Navigator.push(
               context,
               CupertinoPageRoute(
-                builder: (_) => const CreateEventPage(),
+                builder: (_) => CreateEventPage(businessId: widget.businessId,),
               ),
             );
             setState(() => _loading = true);

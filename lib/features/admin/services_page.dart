@@ -8,7 +8,12 @@ import 'packages_page.dart';
 import 'service_form_page.dart';
 
 class ServicesPage extends StatefulWidget {
-  const ServicesPage({super.key});
+  final String businessId;
+
+  const ServicesPage({
+    super.key,
+    required this.businessId
+  });
 
   @override
   State<ServicesPage> createState() =>
@@ -18,31 +23,9 @@ class ServicesPage extends StatefulWidget {
 class _ServicesPageState
     extends State<ServicesPage> {
 
-  late Future<String> _businessFuture;
-
-  @override
-  void initState() {
-    super.initState();
-    _businessFuture = getBusinessId();
-  }
-
   @override
   Widget build(BuildContext context) {
-
-    return FutureBuilder<String>(
-      future: _businessFuture,
-      builder: (context, snapshot) {
-
-        if (!snapshot.hasData) {
-          return const CupertinoPageScaffold(
-            child: Center(
-              child:
-              CupertinoActivityIndicator(),
-            ),
-          );
-        }
-
-        final businessId = snapshot.data!;
+    final businessId = widget.businessId;
 
         return CupertinoPageScaffold(
           backgroundColor:
@@ -64,8 +47,7 @@ class _ServicesPageState
                 Navigator.push(
                   context,
                   CupertinoPageRoute(
-                    builder: (_) =>
-                    const ServiceFormPage(),
+                    builder: (_) => ServiceFormPage(businessId: businessId),
                   ),
                 );
               },
@@ -253,8 +235,6 @@ class _ServicesPageState
             ),
           ),
         );
-      },
-    );
   }
 
   void _showActions(
@@ -281,6 +261,7 @@ class _ServicesPageState
                             service.id,
                             serviceName:
                             service.name,
+                            businessId: widget.businessId,
                           ),
                     ),
                   );
@@ -300,6 +281,7 @@ class _ServicesPageState
                             service.id,
                             serviceName:
                             service.name,
+                            businessId: widget.businessId,
                           ),
                     ),
                   );

@@ -1,16 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
-import '../../core/business_helper.dart';
 
 class EditEventPage extends StatefulWidget {
   final String eventId;
   final Map<String, dynamic> eventData;
+  final String businessId;
 
   const EditEventPage({
     super.key,
     required this.eventId,
     required this.eventData,
+    required this.businessId
   });
 
   @override
@@ -22,7 +23,6 @@ class _EditEventPageState
     extends State<EditEventPage> {
 
   late DateTime _selectedDate;
-  late Future<String> _businessFuture;
 
   @override
   void initState() {
@@ -30,8 +30,6 @@ class _EditEventPageState
 
     _selectedDate =
         widget.eventData['date'].toDate();
-
-    _businessFuture = getBusinessId();
   }
 
   Future<void> _updateEvent(
@@ -135,18 +133,7 @@ class _EditEventPageState
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<String>(
-      future: _businessFuture,
-      builder: (context, snapshot) {
-
-        if (!snapshot.hasData) {
-          return const Scaffold(
-            body: Center(
-                child: CircularProgressIndicator()),
-          );
-        }
-
-        final businessId = snapshot.data!;
+    final businessId = widget.businessId;
 
         return Scaffold(
           appBar: AppBar(
@@ -198,7 +185,5 @@ class _EditEventPageState
             ),
           ),
         );
-      },
-    );
   }
 }

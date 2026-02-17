@@ -6,10 +6,12 @@ import '../../core/business_helper.dart';
 
 class CalendarPage extends StatefulWidget {
   final Function(DateTime) onDateSelected;
+  final String businessId;
 
   const CalendarPage({
     super.key,
     required this.onDateSelected,
+    required this.businessId
   });
 
   @override
@@ -22,29 +24,12 @@ class _CalendarPageState extends State<CalendarPage> {
   DateTime _focusedDay = DateTime.now();
   DateTime _selectedDay = DateTime.now();
 
-  late Future<String> _businessFuture;
-
-  @override
-  void initState() {
-    super.initState();
-    _businessFuture = getBusinessId();
-  }
-
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<String>(
-      future: _businessFuture,
-      builder: (context, snapshot) {
 
-        if (!snapshot.hasData) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
-        }
+    final businessId = widget.businessId;
 
-        final businessId = snapshot.data!;
-
-        return Scaffold(
+    return Scaffold(
           appBar: AppBar(
             title: const Text("Calendario"),
           ),
@@ -137,7 +122,5 @@ class _CalendarPageState extends State<CalendarPage> {
             },
           ),
         );
-      },
-    );
   }
 }

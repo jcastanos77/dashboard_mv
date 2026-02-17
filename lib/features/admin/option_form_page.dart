@@ -6,11 +6,13 @@ import '../../models/option_model.dart';
 class OptionFormPage extends StatefulWidget {
   final String serviceId;
   final OptionModel? optionModel;
+  final String businessId;
 
   const OptionFormPage({
     super.key,
     required this.serviceId,
     this.optionModel,
+    required this.businessId
   });
 
   @override
@@ -27,12 +29,9 @@ class _OptionFormPageState
   final _extraCostController =
   TextEditingController();
 
-  late Future<String> _businessFuture;
-
   @override
   void initState() {
     super.initState();
-    _businessFuture = getBusinessId();
 
     if (widget.optionModel != null) {
       _nameController.text =
@@ -75,19 +74,7 @@ class _OptionFormPageState
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<String>(
-      future: _businessFuture,
-      builder: (context, snapshot) {
-
-        if (!snapshot.hasData) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
-        }
-
-        final businessId = snapshot.data!;
-
-        return Scaffold(
+    return Scaffold(
           appBar: AppBar(
             title: Text(widget.optionModel == null
                 ? "Nueva Opción"
@@ -133,7 +120,7 @@ class _OptionFormPageState
                     width: double.infinity,
                     child: ElevatedButton(
                       onPressed: () =>
-                          _save(businessId),
+                          _save(widget.businessId),
                       child: const Text("Guardar"),
                     ),
                   )
@@ -142,7 +129,5 @@ class _OptionFormPageState
             ),
           ),
         );
-      },
-    );
   }
 }

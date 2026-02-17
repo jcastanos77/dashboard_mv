@@ -33,10 +33,10 @@ class _HomePageState
     super.initState();
 
     _pages = [
-      EventsPage(),
-      DashboardPage(),
-      AvailabilityPage(),
-      ServicesPage(),
+      EventsPage(businessId: widget.businessId,),
+      DashboardPage(businessId: widget.businessId,),
+      AvailabilityPage(businessId: widget.businessId,),
+      ServicesPage(businessId: widget.businessId,),
     ];
   }
 

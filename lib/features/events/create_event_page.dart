@@ -6,7 +6,8 @@ import '../../core/business_helper.dart';
 import '../../services/event_service.dart';
 
 class CreateEventPage extends StatefulWidget {
-  const CreateEventPage({super.key});
+  final String businessId;
+  const CreateEventPage({super.key, required this.businessId});
 
   @override
   State<CreateEventPage> createState() =>
@@ -54,7 +55,7 @@ class _CreateEventPageState
   }
 
   Future<void> _init() async {
-    final id = await getBusinessId();
+    final id = widget.businessId;
     setState(() {
       _businessId = id;
       _initialLoading = false;

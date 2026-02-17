@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:dashboard_mvsnacks/features/admin/services_page.dart';
+import 'package:dashboard_mvsnacks/features/home/settings_page.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -37,7 +38,7 @@ class _HomePageState
       ServicesPage(businessId: widget.businessId,),
       AvailabilityPage(businessId: widget.businessId,),
       DashboardPage(businessId: widget.businessId,),
-
+      SettingsPage(businessId: widget.businessId),
     ];
   }
 
@@ -138,6 +139,11 @@ class _AppleNavBar extends StatelessWidget {
               _item(
                 CupertinoIcons.chart_bar,
                 3,
+              ),
+
+              _item(
+                CupertinoIcons.settings,
+                4,
               ),
             ],
           ),

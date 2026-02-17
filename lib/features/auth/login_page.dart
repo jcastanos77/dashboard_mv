@@ -200,29 +200,36 @@ class _LoginPageState extends State<LoginPage> {
     bool obscure = false,
   }) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
-        color: const Color(0xFFF2F2F7),
-        borderRadius: BorderRadius.circular(16),
+        color: CupertinoColors.secondarySystemGroupedBackground
+            .resolveFrom(context),
+        borderRadius: BorderRadius.circular(18),
       ),
       child: Row(
         children: [
 
           Icon(
             icon,
-            size: 18,
-            color: CupertinoColors.inactiveGray,
+            size: 20,
+            color: CupertinoColors.secondaryLabel.resolveFrom(context),
           ),
 
-          const SizedBox(width: 10),
+          const SizedBox(width: 12),
 
           Expanded(
-            child: TextField(
+            child: CupertinoTextField(
               controller: controller,
+              placeholder: placeholder,
               obscureText: obscure,
-              style: const TextStyle(fontSize: 15),
-              decoration: const InputDecoration(
-                border: InputBorder.none,
+              padding: EdgeInsets.zero, // 🔥 importante
+              decoration: null,         // 🔥 quita caja interna
+              style: TextStyle(
+                fontSize: 16,
+                color: CupertinoColors.label.resolveFrom(context),
+              ),
+              placeholderStyle: TextStyle(
+                color: CupertinoColors.placeholderText.resolveFrom(context),
               ),
             ),
           ),
@@ -230,4 +237,5 @@ class _LoginPageState extends State<LoginPage> {
       ),
     );
   }
+
 }

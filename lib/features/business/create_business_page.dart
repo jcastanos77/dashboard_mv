@@ -160,6 +160,7 @@ class _CreateBusinessPageState
                     "Crear negocio",
                     style:
                     TextStyle(
+                      color: Colors.white,
                       fontWeight:
                       FontWeight
                           .w600,

@@ -34,9 +34,10 @@ class _HomePageState
 
     _pages = [
       EventsPage(businessId: widget.businessId,),
-      DashboardPage(businessId: widget.businessId,),
-      AvailabilityPage(businessId: widget.businessId,),
       ServicesPage(businessId: widget.businessId,),
+      AvailabilityPage(businessId: widget.businessId,),
+      DashboardPage(businessId: widget.businessId,),
+
     ];
   }
 
@@ -120,12 +121,12 @@ class _AppleNavBar extends StatelessWidget {
             children: [
 
               _item(
-                CupertinoIcons.calendar,
+                CupertinoIcons.text_badge_checkmark,
                 0,
               ),
 
               _item(
-                CupertinoIcons.chart_bar,
+                CupertinoIcons.create,
                 1,
               ),
 
@@ -135,7 +136,7 @@ class _AppleNavBar extends StatelessWidget {
               ),
 
               _item(
-                CupertinoIcons.gear,
+                CupertinoIcons.chart_bar,
                 3,
               ),
             ],

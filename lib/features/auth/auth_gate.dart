@@ -15,50 +15,40 @@ class AuthGate extends StatelessWidget {
       stream: FirebaseAuth.instance.authStateChanges(),
       builder: (context, snapshot) {
 
-        if (snapshot.connectionState ==
-            ConnectionState.waiting) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(
-            body: Center(
-                child: CircularProgressIndicator()),
+            body: Center(child: CircularProgressIndicator()),
           );
         }
 
-        if (!snapshot.hasData) {
+        final user = snapshot.data;
+
+        if (user == null) {
           return const LoginPage();
         }
-
-        final uid = snapshot.data!.uid;
 
         return StreamBuilder<DocumentSnapshot>(
           stream: FirebaseFirestore.instance
               .collection('users')
-              .doc(uid)
+              .doc(user.uid)
               .snapshots(),
           builder: (context, userSnapshot) {
 
             if (!userSnapshot.hasData) {
               return const Scaffold(
-                body: Center(
-                    child: CircularProgressIndicator()),
+                body: Center(child: CircularProgressIndicator()),
               );
             }
 
-            final userDoc = userSnapshot.data!;
-
-            if (!userDoc.exists) {
-              return const CreateBusinessPage();
-            }
-
             final data =
-            userDoc.data() as Map<String, dynamic>?;
+            userSnapshot.data!.data() as Map<String, dynamic>?;
 
-            if (data == null ||
-                data['businessId'] == null) {
+            if (data == null || data['businessId'] == null) {
               return const CreateBusinessPage();
             }
 
-            return const Scaffold(
-              body: Center(child: Text("ENTRÓ A HOME")),
+            return HomePage(
+              businessId: data['businessId'],
             );
           },
         );

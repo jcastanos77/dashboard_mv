@@ -34,6 +34,10 @@ class _EventsPageState extends State<EventsPage> {
 
     final businessId = await getBusinessId();
 
+    if (businessId == null) {
+      return;
+    }
+
     final today = DateTime.now();
     final startToday =
     DateTime(today.year, today.month, today.day);

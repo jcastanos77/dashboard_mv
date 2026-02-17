@@ -36,6 +36,10 @@ class _AvailabilityPageState
 
     final businessId = await getBusinessId();
 
+    if (businessId == null) {
+      return;
+    }
+
     final start = DateTime(
         _selectedDate.year,
         _selectedDate.month,

@@ -9,7 +9,12 @@ import '../dashboard/dashboard_page.dart';
 import '../events/availability_page.dart';
 
 class HomePage extends StatefulWidget {
-  const HomePage({super.key});
+  final String businessId;
+
+  const HomePage({
+    super.key,
+    required this.businessId,
+  });
 
   @override
   State<HomePage> createState() =>

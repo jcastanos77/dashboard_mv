@@ -26,12 +26,19 @@ class _HomePageState
 
   int _currentIndex = 0;
 
-  final List<Widget> _pages = const [
-    EventsPage(),
-    DashboardPage(),
-    AvailabilityPage(),
-    ServicesPage(),
-  ];
+  late final List<Widget> _pages;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _pages = [
+      EventsPage(),
+      DashboardPage(),
+      AvailabilityPage(),
+      ServicesPage(),
+    ];
+  }
 
   @override
   Widget build(BuildContext context) {

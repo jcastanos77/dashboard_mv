@@ -2,7 +2,6 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
-import '../../core/business_helper.dart';
 import '../events/create_event_page.dart';
 
 class AvailabilityPage extends StatefulWidget {
@@ -20,9 +19,8 @@ class _AvailabilityPageState
   DateTime _selectedDate = DateTime.now();
   bool _loading = true;
 
-  Map<String, int> _availability = {};
-  Map<String, String> _serviceNames = {};
-  Map<String, int> _serviceCapacity = {};
+  Map<String, int> _realAvailability = {};
+  Map<String, String> _resourceLabels = {};
   List<QueryDocumentSnapshot> _events = [];
 
   @override
@@ -35,183 +33,170 @@ class _AvailabilityPageState
 
     setState(() => _loading = true);
 
-    final businessId = widget.businessId;
-
-    if (businessId == null) {
-      return;
-    }
+    final db = FirebaseFirestore.instance;
 
     final start = DateTime(
         _selectedDate.year,
         _selectedDate.month,
         _selectedDate.day);
 
-    final end =
-    start.add(const Duration(days: 1));
+    final end = start.add(const Duration(days: 1));
 
     /// EVENTOS DEL DÍA
     final eventsSnap =
-    await FirebaseFirestore.instance
+    await db
         .collection('businesses')
-        .doc(businessId)
+        .doc(widget.businessId)
         .collection('events')
-        .where('date',
-        isGreaterThanOrEqualTo: start)
-        .where('date',
-        isLessThan: end)
+        .where('date', isGreaterThanOrEqualTo: start)
+        .where('date', isLessThan: end)
         .get();
 
-    /// DISPONIBILIDAD DEL DÍA
-    final dateId =
-    DateFormat('yyyy-MM-dd')
-        .format(_selectedDate);
+    /// CALCULAR DISPONIBILIDAD REAL
+    final real = await _calculateAvailability(_selectedDate);
 
-    final availabilitySnap =
-    await FirebaseFirestore.instance
-        .collection('businesses')
-        .doc(businessId)
-        .collection('availability')
-        .doc(dateId)
-        .get();
-
-    /// SERVICIOS
-    final servicesSnap =
-    await FirebaseFirestore.instance
-        .collection('businesses')
-        .doc(businessId)
-        .collection('services')
-        .get();
-
-    final servicesMap = {
-      for (var doc in servicesSnap.docs)
-        doc.id: doc['name'] as String
-    };
-
-    final capacityMap = {
-      for (var doc in servicesSnap.docs)
-        doc.id:
-        (doc['dailyCapacity'] ?? 0)
-        as int
-    };
-
-    Map<String, int> availabilityMap = {};
-
-    final rawData = availabilitySnap.data();
-    if (rawData != null) {
-      availabilityMap = rawData.map(
-            (key, value) =>
-            MapEntry(key, (value as num).toInt()),
-      );
-    }
     if (!mounted) return;
 
     setState(() {
       _events = eventsSnap.docs;
-      _availability = availabilityMap;
-      _serviceNames = servicesMap;
-      _serviceCapacity = capacityMap;
+      _realAvailability = real;
       _loading = false;
     });
+  }
+
+  Future<Map<String, int>> _calculateAvailability(DateTime date) async {
+
+    final db = FirebaseFirestore.instance;
+
+    final businessDoc = await db
+        .collection('businesses')
+        .doc(widget.businessId)
+        .get();
+
+    final resources =
+    Map<String, dynamic>.from(businessDoc.data()?['resources'] ?? {});
+
+    final dateStart = DateTime(date.year, date.month, date.day);
+    final dateEnd = dateStart.add(const Duration(days: 1));
+
+    final eventsSnap = await db
+        .collection('businesses')
+        .doc(widget.businessId)
+        .collection('events')
+        .where('date', isGreaterThanOrEqualTo: dateStart)
+        .where('date', isLessThan: dateEnd)
+        .get();
+
+    Map<String, int> used = {};
+
+    for (var doc in eventsSnap.docs) {
+
+      final services =
+      List<Map<String, dynamic>>.from(doc['services'] ?? []);
+
+      for (var s in services) {
+
+        String? resourceType = s['resourceType'];
+
+        /// 🔥 Compatibilidad eventos viejos
+        if (resourceType == null) {
+
+          final serviceId = s['serviceId'];
+
+          if (serviceId != null) {
+            final serviceDoc = await db
+                .collection('businesses')
+                .doc(widget.businessId)
+                .collection('services')
+                .doc(serviceId)
+                .get();
+
+            resourceType =
+            serviceDoc.data()?['resourceType'];
+          }
+        }
+
+        if (resourceType == null) continue;
+
+        used[resourceType] =
+            (used[resourceType] ?? 0) + 1;
+      }
+    }
+
+    Map<String, int> result = {};
+
+    for (var entry in resources.entries) {
+
+      final total =
+          (entry.value as num?)?.toInt() ?? 0;
+
+      final usedCount =
+          used[entry.key] ?? 0;
+
+      result[entry.key] = total - usedCount;
+    }
+
+    return result;
   }
 
   @override
   Widget build(BuildContext context) {
 
     return CupertinoPageScaffold(
-      backgroundColor:
-      const Color(0xFFF2F2F7),
-
-      navigationBar:
-      CupertinoNavigationBar(
+      backgroundColor: const Color(0xFFF2F2F7),
+      navigationBar: CupertinoNavigationBar(
         transitionBetweenRoutes: false,
         middle: const Text(
           "Disponibilidad",
-          style: TextStyle(
-              fontWeight:
-              FontWeight.w600),
+          style: TextStyle(fontWeight: FontWeight.w600),
         ),
         trailing: CupertinoButton(
           padding: EdgeInsets.zero,
-          child: const Icon(
-              CupertinoIcons.add),
+          child: const Icon(CupertinoIcons.add),
           onPressed: () async {
             await Navigator.push(
               context,
               CupertinoPageRoute(
                 builder: (_) =>
-                 CreateEventPage(businessId: widget.businessId,),
+                    CreateEventPage(businessId: widget.businessId),
               ),
             );
             _loadData();
           },
         ),
       ),
-
       child: SafeArea(
         child: _loading
-            ? const Center(
-          child:
-          CupertinoActivityIndicator(),
-        )
+            ? const Center(child: CupertinoActivityIndicator())
             : ListView(
-          padding:
-          const EdgeInsets
-              .fromLTRB(
-              16,
-              16,
-              16,
-              120),
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
           children: [
 
-            /// SELECTOR PRINCIPAL
+            /// SELECTOR FECHA
             GestureDetector(
-              onTap:
-              _openFullScreenDatePicker,
+              onTap: _openFullScreenDatePicker,
               child: Container(
-                padding:
-                const EdgeInsets
-                    .all(18),
-                decoration:
-                BoxDecoration(
-                  color:
-                  CupertinoColors
-                      .white,
-                  borderRadius:
-                  BorderRadius
-                      .circular(
-                      20),
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: CupertinoColors.white,
+                  borderRadius: BorderRadius.circular(20),
                 ),
                 child: Row(
-                  mainAxisAlignment:
-                  MainAxisAlignment
-                      .spaceBetween,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-
                     const Text(
                       "Fecha seleccionada",
-                      style:
-                      TextStyle(
-                        color:
-                        CupertinoColors
-                            .inactiveGray,
+                      style: TextStyle(
+                        color: CupertinoColors.inactiveGray,
                       ),
                     ),
-
                     Text(
-                      DateFormat(
-                          'dd MMM yyyy')
-                          .format(
-                          _selectedDate),
-                      style:
-                      const TextStyle(
-                        fontSize:
-                        17,
-                        fontWeight:
-                        FontWeight
-                            .w600,
-                        color:
-                        CupertinoColors
-                            .systemBlue,
+                      DateFormat('dd MMM yyyy')
+                          .format(_selectedDate),
+                      style: const TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w600,
+                        color: CupertinoColors.systemBlue,
                       ),
                     ),
                   ],
@@ -219,121 +204,45 @@ class _AvailabilityPageState
               ),
             ),
 
-            const SizedBox(
-                height: 14),
-
-            /// CHIPS RÁPIDOS
-            SizedBox(
-              height: 38,
-              child: ListView(
-                scrollDirection:
-                Axis.horizontal,
-                children: [
-
-                  _quickChip(
-                      "Hoy",
-                      DateTime
-                          .now()),
-
-                  _quickChip(
-                      "Mañana",
-                      DateTime.now()
-                          .add(
-                          const Duration(
-                              days:
-                              1))),
-
-                  _quickChip(
-                      "+7 días",
-                      DateTime.now()
-                          .add(
-                          const Duration(
-                              days:
-                              7))),
-
-                  _quickChip(
-                      "Fin de semana",
-                      _nextSaturday()),
-                ],
-              ),
-            ),
-
-            const SizedBox(
-                height: 28),
+            const SizedBox(height: 28),
 
             const Text(
               "Capacidad del día",
               style: TextStyle(
-                fontWeight:
-                FontWeight.w600,
-                color:
-                CupertinoColors
-                    .inactiveGray,
+                fontWeight: FontWeight.w600,
+                color: CupertinoColors.inactiveGray,
               ),
             ),
 
-            const SizedBox(
-                height: 12),
+            const SizedBox(height: 12),
 
-            ..._serviceNames.entries
-                .map((entry) {
+            ..._realAvailability.entries.map((entry) {
 
-              final used =
-                  _availability[
-                  entry.key] ??
-                      0;
-
-              final capacity =
-                  _serviceCapacity[
-                  entry.key] ??
-                      0;
-
-              final available =
-                  capacity - used;
+              final available = entry.value;
 
               return Container(
-                margin:
-                const EdgeInsets
-                    .only(
-                    bottom:
-                    12),
-                padding:
-                const EdgeInsets
-                    .all(16),
-                decoration:
-                BoxDecoration(
-                  color:
-                  CupertinoColors
-                      .white,
-                  borderRadius:
-                  BorderRadius
-                      .circular(
-                      20),
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: CupertinoColors.white,
+                  borderRadius: BorderRadius.circular(20),
                 ),
                 child: Row(
                   mainAxisAlignment:
-                  MainAxisAlignment
-                      .spaceBetween,
+                  MainAxisAlignment.spaceBetween,
                   children: [
 
-                    Text(
-                        entry.value),
+                    Text(entry.key),
 
                     Text(
                       available <= 0
                           ? "FULL"
                           : "$available disponibles",
-                      style:
-                      TextStyle(
-                        fontWeight:
-                        FontWeight
-                            .w600,
-                        color: available >
-                            0
-                            ? CupertinoColors
-                            .systemGreen
-                            : CupertinoColors
-                            .systemRed,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: available > 0
+                            ? CupertinoColors.systemGreen
+                            : CupertinoColors.systemRed,
                       ),
                     ),
                   ],
@@ -341,30 +250,24 @@ class _AvailabilityPageState
               );
             }),
 
-            const SizedBox(
-                height: 28),
+            const SizedBox(height: 28),
 
             const Text(
               "Eventos del día",
               style: TextStyle(
-                fontWeight:
-                FontWeight.w600,
-                color:
-                CupertinoColors
-                    .inactiveGray,
+                fontWeight: FontWeight.w600,
+                color: CupertinoColors.inactiveGray,
               ),
             ),
 
-            const SizedBox(
-                height: 12),
+            const SizedBox(height: 12),
 
             if (_events.isEmpty)
               const Text(
                 "No hay eventos este día",
                 style: TextStyle(
-                    color:
-                    CupertinoColors
-                        .inactiveGray),
+                  color: CupertinoColors.inactiveGray,
+                ),
               ),
 
             ..._events.map((doc) {
@@ -378,86 +281,69 @@ class _AvailabilityPageState
               final paid =
               (data['totalPaid'] ?? 0) as num;
 
-              final remaining =
-                  total - paid;
+              final remaining = total - paid;
 
-              final date =
-              (data['date'] as Timestamp)
-                  .toDate();
+              final services =
+              List<Map<String, dynamic>>.from(data['services'] ?? []);
 
               return Container(
-                margin:
-                const EdgeInsets.only(
-                    bottom: 12),
-                padding:
-                const EdgeInsets.all(16),
-                decoration:
-                BoxDecoration(
-                  color:
-                  CupertinoColors.white,
-                  borderRadius:
-                  BorderRadius.circular(
-                      20),
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: CupertinoColors.white,
+                  borderRadius: BorderRadius.circular(20),
                 ),
                 child: Column(
                   crossAxisAlignment:
                   CrossAxisAlignment.start,
                   children: [
 
-                    /// CLIENTE
                     Text(
                       data['clientName'] ?? '',
                       style: const TextStyle(
                         fontSize: 16,
-                        fontWeight:
-                        FontWeight.w600,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
 
                     const SizedBox(height: 6),
 
-                    /// UBICACIÓN
-                    if (data['locationName'] !=
-                        null)
+                    if ((data['locationName'] ?? '').isNotEmpty)
                       Text(
                         "📍 ${data['locationName']}",
                         style: const TextStyle(
-                          color:
-                          CupertinoColors
-                              .inactiveGray,
+                          color: CupertinoColors.inactiveGray,
                         ),
                       ),
 
-                    /// PAQUETE
-                    if (data['packageName'] !=
-                        null)
-                      Text(
-                        "🛠 ${data['packageName']}",
-                        style: const TextStyle(
-                          color:
-                          CupertinoColors
-                              .inactiveGray,
+                    const SizedBox(height: 6),
+
+                    /// 🔥 SERVICIOS NUEVO MODELO
+                    ...services.map((s) {
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: Text(
+                          "🎪 ${s['serviceName'] ?? ''} • ${s['packageName'] ?? ''}",
+                          style: const TextStyle(
+                            color: CupertinoColors.inactiveGray,
+                          ),
                         ),
-                      ),
+                      );
+                    }),
 
                     const SizedBox(height: 10),
 
-                    /// ESTADO DE PAGO
                     Align(
-                      alignment:
-                      Alignment.centerRight,
+                      alignment: Alignment.centerRight,
                       child: Text(
                         remaining <= 0
                             ? "Liquidado"
                             : "Restante \$${remaining.toStringAsFixed(0)}",
                         style: TextStyle(
-                          fontWeight:
-                          FontWeight.w600,
+                          fontWeight: FontWeight.w600,
                           color: remaining <= 0
-                              ? CupertinoColors
-                              .systemGreen
-                              : CupertinoColors
-                              .systemOrange,
+                              ? CupertinoColors.systemGreen
+                              : CupertinoColors.systemOrange,
                         ),
                       ),
                     ),
@@ -465,7 +351,6 @@ class _AvailabilityPageState
                 ),
               );
             }),
-
           ],
         ),
       ),
@@ -478,13 +363,10 @@ class _AvailabilityPageState
         fullscreenDialog: true,
         builder: (_) =>
             _FullScreenDatePicker(
-              initialDate:
-              _selectedDate,
-              onDateSelected:
-                  (date) {
+              initialDate: _selectedDate,
+              onDateSelected: (date) {
                 setState(() {
-                  _selectedDate =
-                      date;
+                  _selectedDate = date;
                 });
                 _loadData();
               },
@@ -492,84 +374,12 @@ class _AvailabilityPageState
       ),
     );
   }
-
-  Widget _quickChip(
-      String label,
-      DateTime date) {
-
-    final normalized = DateTime(
-        date.year,
-        date.month,
-        date.day);
-
-    final isSelected =
-        normalized ==
-            DateTime(
-                _selectedDate.year,
-                _selectedDate.month,
-                _selectedDate.day);
-
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          _selectedDate =
-              normalized;
-        });
-        _loadData();
-      },
-      child: Container(
-        margin:
-        const EdgeInsets
-            .only(right: 10),
-        padding:
-        const EdgeInsets
-            .symmetric(
-            horizontal: 14,
-            vertical: 8),
-        decoration:
-        BoxDecoration(
-          color: isSelected
-              ? CupertinoColors
-              .systemBlue
-              : CupertinoColors
-              .white,
-          borderRadius:
-          BorderRadius
-              .circular(18),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: isSelected
-                ? CupertinoColors
-                .white
-                : CupertinoColors
-                .black,
-            fontWeight:
-            FontWeight.w600,
-          ),
-        ),
-      ),
-    );
-  }
-
-  DateTime _nextSaturday() {
-    final now = DateTime.now();
-    int daysToAdd =
-        (6 - now.weekday) % 7;
-    if (daysToAdd == 0)
-      daysToAdd = 7;
-    return now.add(
-        Duration(days: daysToAdd));
-  }
 }
 
-class _FullScreenDatePicker
-    extends StatefulWidget {
+class _FullScreenDatePicker extends StatefulWidget {
 
   final DateTime initialDate;
-  final Function(DateTime)
-  onDateSelected;
+  final Function(DateTime) onDateSelected;
 
   const _FullScreenDatePicker({
     required this.initialDate,
@@ -578,62 +388,45 @@ class _FullScreenDatePicker
 
   @override
   State<_FullScreenDatePicker>
-  createState() =>
-      _FullScreenDatePickerState();
+  createState() => _FullScreenDatePickerState();
 }
 
 class _FullScreenDatePickerState
-    extends State<
-        _FullScreenDatePicker> {
+    extends State<_FullScreenDatePicker> {
 
   late DateTime _tempDate;
 
   @override
   void initState() {
     super.initState();
-    _tempDate =
-        widget.initialDate;
+    _tempDate = widget.initialDate;
   }
 
   @override
-  Widget build(
-      BuildContext context) {
+  Widget build(BuildContext context) {
 
     return CupertinoPageScaffold(
-      navigationBar:
-      CupertinoNavigationBar(
+      navigationBar: CupertinoNavigationBar(
         transitionBetweenRoutes: false,
-        middle: const Text(
-            "Seleccionar fecha"),
+        middle: const Text("Seleccionar fecha"),
         trailing: CupertinoButton(
-          padding:
-          EdgeInsets.zero,
-          child:
-          const Text("Listo"),
+          padding: EdgeInsets.zero,
+          child: const Text("Listo"),
           onPressed: () {
-            widget
-                .onDateSelected(
-                _tempDate);
-            Navigator.pop(
-                context);
+            widget.onDateSelected(_tempDate);
+            Navigator.pop(context);
           },
         ),
       ),
       child: SafeArea(
         child: Center(
-          child:
-          CupertinoDatePicker(
-            mode:
-            CupertinoDatePickerMode
-                .date,
-            initialDateTime:
-            _tempDate,
+          child: CupertinoDatePicker(
+            mode: CupertinoDatePickerMode.date,
+            initialDateTime: _tempDate,
             minimumYear: 2023,
             maximumYear: 2035,
-            onDateTimeChanged:
-                (date) {
-              _tempDate =
-                  date;
+            onDateTimeChanged: (date) {
+              _tempDate = date;
             },
           ),
         ),

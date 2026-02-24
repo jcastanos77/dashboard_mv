@@ -53,6 +53,7 @@ dev_dependencies:
   firebase_storage: ^13.0.6
   image_picker: ^1.1.2
   file_picker: ^10.3.10
+  scrollable_positioned_list: ^0.3.8
 
 flutter_icons:
   android: true

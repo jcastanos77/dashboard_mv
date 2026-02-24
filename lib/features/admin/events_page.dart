@@ -1,7 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
-import '../../core/business_helper.dart';
+import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 import '../events/create_event_page.dart';
 import 'event_detail_page.dart';
 
@@ -17,11 +17,35 @@ class EventsPage extends StatefulWidget {
   State<EventsPage> createState() => _EventsPageState();
 }
 
+class _EventListItem {
+  final bool isHeader;
+  final DateTime? date;
+  final QueryDocumentSnapshot? doc;
+
+  _EventListItem.header(this.date)
+      : isHeader = true,
+        doc = null;
+
+  _EventListItem.event(this.doc)
+      : isHeader = false,
+        date = null;
+}
+
 class _EventsPageState extends State<EventsPage> {
 
+  final ItemScrollController _itemScrollController =
+  ItemScrollController();
+
+  final ItemPositionsListener _itemPositionsListener =
+  ItemPositionsListener.create();
+
   List<QueryDocumentSnapshot> _events = [];
-  Map<DateTime, int> _weeklyCount = {};
-  DateTime _weekStart = _startOfWeek(DateTime.now());
+  List<_EventListItem> _flattenedItems = [];
+
+  Map<DateTime, int> _countByDate = {};
+  Map<DateTime, int> _indexByDate = {};
+
+  DateTime? _selectedDay;
 
   bool _loading = true;
 
@@ -31,72 +55,83 @@ class _EventsPageState extends State<EventsPage> {
     _loadData();
   }
 
-  static DateTime _startOfWeek(DateTime date) {
-    final diff = date.weekday - 1;
-    return DateTime(date.year, date.month, date.day - diff);
-  }
-
   Future<void> _loadData() async {
 
-    final businessId = widget.businessId;
+    setState(() => _loading = true);
 
     final today = DateTime.now();
     final startToday =
     DateTime(today.year, today.month, today.day);
 
-    final eventsSnap =
-    await FirebaseFirestore.instance
+    final snap = await FirebaseFirestore.instance
         .collection('businesses')
-        .doc(businessId)
+        .doc(widget.businessId)
         .collection('events')
         .where('date', isGreaterThanOrEqualTo: startToday)
         .orderBy('date')
-        .limit(50)
         .get();
 
-    final weekEnd =
-    _weekStart.add(const Duration(days: 7));
+    _events = snap.docs;
+    _flattenedItems.clear();
+    _indexByDate.clear();
+    _countByDate.clear();
 
-    final weeklySnap =
-    await FirebaseFirestore.instance
-        .collection('businesses')
-        .doc(businessId)
-        .collection('events')
-        .where('date', isGreaterThanOrEqualTo: _weekStart)
-        .where('date', isLessThan: weekEnd)
-        .get();
+    DateTime? lastDate;
 
-    Map<DateTime, int> weeklyMap = {};
+    for (var doc in _events) {
+      final data = doc.data() as Map<String, dynamic>;
+      final date = (data['date'] as Timestamp).toDate();
+      final day = DateTime(date.year, date.month, date.day);
 
-    for (var doc in weeklySnap.docs) {
-      final date =
-      (doc['date'] as Timestamp).toDate();
+      _countByDate[day] =
+          (_countByDate[day] ?? 0) + 1;
 
-      final day = DateTime(
-          date.year, date.month, date.day);
+      if (lastDate == null || lastDate != day) {
+        _indexByDate[day] = _flattenedItems.length;
+        _flattenedItems.add(_EventListItem.header(day));
+        lastDate = day;
+      }
 
-      weeklyMap[day] =
-          (weeklyMap[day] ?? 0) + 1;
+      _flattenedItems.add(_EventListItem.event(doc));
     }
+
     if (!mounted) return;
 
     setState(() {
-      _events = eventsSnap.docs;
-      _weeklyCount = weeklyMap;
       _loading = false;
     });
+  }
+
+  void _scrollToDate(DateTime day) {
+
+    setState(() {
+      _selectedDay = day;
+    });
+
+    final index = _indexByDate[day];
+
+    if (index != null) {
+      _itemScrollController.scrollTo(
+        index: index,
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeInOut,
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
 
-    final sortedDays = _weeklyCount.keys.toList()..sort();
+    final sortedDays =
+    _countByDate.keys.toList()..sort();
 
     final bg =
-    CupertinoColors.systemGroupedBackground.resolveFrom(context);
+    CupertinoColors.systemGroupedBackground
+        .resolveFrom(context);
 
     final cardBg =
-    CupertinoColors.secondarySystemGroupedBackground.resolveFrom(context);
+    CupertinoColors.secondarySystemGroupedBackground
+        .resolveFrom(context);
 
     final label =
     CupertinoColors.label.resolveFrom(context);
@@ -107,9 +142,8 @@ class _EventsPageState extends State<EventsPage> {
     return CupertinoPageScaffold(
       backgroundColor: bg,
       navigationBar: CupertinoNavigationBar(
-        transitionBetweenRoutes: false,
         middle: const Text(
-          "Próximos Eventos",
+          "Eventos Futuros",
           style: TextStyle(fontWeight: FontWeight.w600),
         ),
         trailing: CupertinoButton(
@@ -119,222 +153,315 @@ class _EventsPageState extends State<EventsPage> {
             await Navigator.push(
               context,
               CupertinoPageRoute(
-                builder: (_) => CreateEventPage(businessId: widget.businessId,),
+                builder: (_) =>
+                    CreateEventPage(
+                        businessId: widget.businessId),
               ),
             );
-            setState(() => _loading = true);
             await _loadData();
           },
         ),
       ),
       child: SafeArea(
         child: _loading
-            ? const Center(child: CupertinoActivityIndicator())
+            ? const Center(
+          child: CupertinoActivityIndicator(),
+        )
             : Column(
           children: [
-
-            /// SEMANAL
-            if (_weeklyCount.isNotEmpty)
+            SizedBox(height: 16,),
+            /// CHIPS DE FECHA
+            if (sortedDays.isNotEmpty)
               SizedBox(
                 height: 95,
                 child: ListView(
                   scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  padding:
+                  const EdgeInsets.symmetric(
+                      horizontal: 16),
                   children: sortedDays.map((day) {
 
                     final count =
-                        _weeklyCount[day] ?? 0;
+                        _countByDate[day] ?? 0;
 
-                    final isToday =
-                        DateTime.now().year == day.year &&
-                            DateTime.now().month == day.month &&
-                            DateTime.now().day == day.day;
+                    final isSelected =
+                        _selectedDay != null &&
+                            _selectedDay == day;
 
-                    return Container(
-                      width: 70,
-                      margin: const EdgeInsets.only(right: 12),
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      decoration: BoxDecoration(
-                        color: isToday
-                            ? CupertinoColors.activeBlue
-                            : cardBg,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
+                    return GestureDetector(
+                      onTap: () =>
+                          _scrollToDate(day),
+                      child: AnimatedContainer(
+                        duration:
+                        const Duration(
+                            milliseconds: 250),
+                        width: 75,
+                        margin:
+                        const EdgeInsets.only(
+                            right: 12),
+                        padding:
+                        const EdgeInsets.symmetric(
+                            vertical: 10),
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? CupertinoColors
+                              .systemBlue
+                              : cardBg,
+                          borderRadius:
+                          BorderRadius.circular(
+                              20),
+                        ),
+                        child: Column(
+                          mainAxisAlignment:
+                          MainAxisAlignment
+                              .center,
+                          children: [
 
-                          Text(
-                            DateFormat('E')
-                                .format(day)
-                                .substring(0, 3)
-                                .toUpperCase(),
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: isToday
-                                  ? CupertinoColors.white
-                                  : secondary,
-                            ),
-                          ),
-
-                          const SizedBox(height: 6),
-
-                          Text(
-                            day.day.toString(),
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w600,
-                              color: isToday
-                                  ? CupertinoColors.white
-                                  : label,
-                            ),
-                          ),
-
-                          if (count > 0) ...[
-                            const SizedBox(height: 6),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: isToday
-                                    ? CupertinoColors.white.withOpacity(0.25)
-                                    : CupertinoColors.systemGreen.withOpacity(0.15),
-                                borderRadius: BorderRadius.circular(12),
+                            Text(
+                              DateFormat(
+                                  'MMM',
+                                  'es')
+                                  .format(day)
+                                  .toUpperCase(),
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight:
+                                FontWeight.w600,
+                                color: isSelected
+                                    ? CupertinoColors
+                                    .white
+                                    : secondary,
                               ),
-                              child: Text(
+                            ),
+
+                            const SizedBox(
+                                height: 4),
+
+                            Text(
+                              DateFormat(
+                                  'd',
+                                  'es')
+                                  .format(day),
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight:
+                                FontWeight.w700,
+                                color: isSelected
+                                    ? CupertinoColors
+                                    .white
+                                    : label,
+                              ),
+                            ),
+
+                            const SizedBox(
+                                height: 6),
+
+                            if (count > 0)
+                              Text(
                                 count.toString(),
                                 style: TextStyle(
                                   fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: isToday
-                                      ? CupertinoColors.white
-                                      : CupertinoColors.systemGreen,
+                                  fontWeight:
+                                  FontWeight
+                                      .w600,
+                                  color: isSelected
+                                      ? CupertinoColors
+                                      .white
+                                      : CupertinoColors
+                                      .systemGreen,
                                 ),
                               ),
-                            ),
-                          ]
-                        ],
+                          ],
+                        ),
                       ),
                     );
                   }).toList(),
                 ),
               ),
-
-            /// LISTA
+            SizedBox(height: 16,),
+            /// LISTA CON SCROLL PERFECTO
             Expanded(
-              child: _events.isEmpty
-                  ? Center(
-                child: Text(
-                  "No hay eventos próximos",
-                  style: TextStyle(color: secondary),
-                ),
-              )
-                  : ListView.builder(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
-                itemCount: _events.length,
-                itemBuilder: (context, index) {
+              child:
+              ScrollablePositionedList.builder(
+                itemScrollController:
+                _itemScrollController,
+                itemPositionsListener:
+                _itemPositionsListener,
+                padding:
+                const EdgeInsets.fromLTRB(
+                    16, 12, 16, 100),
+                itemCount:
+                _flattenedItems.length,
+                itemBuilder:
+                    (context, index) {
 
+                  final item =
+                  _flattenedItems[index];
+
+                  if (item.isHeader) {
+                    return Padding(
+                      padding:
+                      const EdgeInsets.only(
+                          top: 24,
+                          bottom: 8),
+                      child: Text(
+                        DateFormat(
+                            "EEEE d 'de' MMMM yyyy",
+                            'es')
+                            .format(
+                            item.date!),
+                        style:
+                        const TextStyle(
+                          fontWeight:
+                          FontWeight.w600,
+                          fontSize: 13,
+                          color: CupertinoColors
+                              .inactiveGray,
+                        ),
+                      ),
+                    );
+                  }
+
+                  final doc = item.doc!;
                   final data =
-                  _events[index].data()
-                  as Map<String, dynamic>;
+                  doc.data()
+                  as Map<String,
+                      dynamic>;
 
                   final total =
-                  (data['totalPrice'] ?? 0) as num;
+                  (data['totalPrice'] ??
+                      0)
+                  as num;
 
                   final paid =
-                  (data['totalPaid'] ?? 0) as num;
+                  (data['totalPaid'] ??
+                      0)
+                  as num;
 
                   final remaining =
                       total - paid;
 
-                  final date =
-                  (data['date'] as Timestamp).toDate();
-
-                  final services = (data['services'] ?? []) as List;
+                  final services =
+                  (data['services'] ??
+                      []) as List;
 
                   return GestureDetector(
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          CupertinoPageRoute(
-                            builder: (_) => EventDetailPage(
-                              eventId: _events[index].id,
-                              eventData: data,
-                              businessId: widget.businessId,
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        CupertinoPageRoute(
+                          builder: (_) =>
+                              EventDetailPage(
+                                eventId: doc.id,
+                                eventData: data,
+                                businessId: widget
+                                    .businessId,
+                              ),
+                        ),
+                      );
+                    },
+                    child: Container(
+                      margin:
+                      const EdgeInsets.only(
+                          bottom: 14),
+                      padding:
+                      const EdgeInsets.all(
+                          18),
+                      decoration:
+                      BoxDecoration(
+                        color: cardBg,
+                        borderRadius:
+                        BorderRadius
+                            .circular(
+                            22),
+                      ),
+                      child: Column(
+                        crossAxisAlignment:
+                        CrossAxisAlignment
+                            .start,
+                        children: [
+
+                          Text(
+                            data['clientName'] ??
+                                '',
+                            style:
+                            TextStyle(
+                              fontSize: 17,
+                              fontWeight:
+                              FontWeight
+                                  .w600,
+                              color: label,
                             ),
                           ),
-                        );
-                      },
-                      child: Container(
-                      margin: const EdgeInsets.only(bottom: 14),
-                    padding: const EdgeInsets.all(18),
-                    decoration: BoxDecoration(
-                      color: cardBg,
-                      borderRadius: BorderRadius.circular(22),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
 
-                        Text(
-                          data['clientName'] ?? '',
-                          style: TextStyle(
-                            fontSize: 17,
-                            fontWeight: FontWeight.w600,
-                            color: label,
-                          ),
-                        ),
+                          const SizedBox(
+                              height: 6),
 
-                        const SizedBox(height: 6),
-
-                        Text(
-                          DateFormat('dd MMM yyyy').format(date),
-                          style: TextStyle(color: secondary),
-                        ),
-
-                        const SizedBox(height: 6),
-
-                        if ((data['locationName'] ?? '').isNotEmpty)
-                          Text(
-                            "📍 ${data['locationName']}",
-                            style: TextStyle(color: secondary),
-                          ),
-
-                        const SizedBox(height: 6),
-
-                        /// 🔥 SERVICIOS CONTRATADOS
-                        ...services.map((service) {
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 4),
-                            child: Text(
-                              "🎪 ${service['serviceName']}  •  ${service['packageName']}",
+                          if ((data['locationName'] ??
+                              '')
+                              .isNotEmpty)
+                            Text(
+                              "📍 ${data['locationName']}",
                               style: TextStyle(
-                                fontSize: 13,
-                                color: label,
+                                  color:
+                                  secondary),
+                            ),
+
+                          const SizedBox(
+                              height: 6),
+
+                          ...services.map(
+                                  (service) {
+                                return Padding(
+                                  padding:
+                                  const EdgeInsets
+                                      .only(
+                                      bottom:
+                                      4),
+                                  child: Text(
+                                    "🎪 ${service['serviceName']} • ${service['packageName'] ?? ''}",
+                                    style:
+                                    TextStyle(
+                                      fontSize:
+                                      13,
+                                      color:
+                                      label,
+                                    ),
+                                  ),
+                                );
+                              }).toList(),
+
+                          const SizedBox(
+                              height: 12),
+
+                          Align(
+                            alignment:
+                            Alignment
+                                .centerRight,
+                            child: Text(
+                              remaining ==
+                                  0
+                                  ? "Liquidado"
+                                  : "Restante \$${remaining.toStringAsFixed(0)}",
+                              style:
+                              TextStyle(
+                                fontWeight:
+                                FontWeight
+                                    .w600,
+                                color:
+                                remaining ==
+                                    0
+                                    ? CupertinoColors
+                                    .systemGreen
+                                    : CupertinoColors
+                                    .systemOrange,
                               ),
                             ),
-                          );
-                        }).toList(),
-
-                        const SizedBox(height: 12),
-
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: Text(
-                            remaining == 0
-                                ? "Liquidado"
-                                : "Restante \$${remaining.toStringAsFixed(0)}",
-                            style: TextStyle(
-                              fontWeight: FontWeight.w600,
-                              color: remaining == 0
-                                  ? CupertinoColors.systemGreen
-                                  : CupertinoColors.systemOrange,
-                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ));
+                  );
                 },
               ),
             ),

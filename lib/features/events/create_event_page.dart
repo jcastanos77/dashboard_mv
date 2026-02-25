@@ -204,12 +204,86 @@ class _CreateEventPageState extends State<CreateEventPage> {
     if (_clientController.text.isEmpty || _services.isEmpty) return;
 
     try {
+
       await _validateResources();
-    } catch (e) {
+
+      final db = FirebaseFirestore.instance;
+      final dateId =
+      DateFormat('yyyy-MM-dd').format(_selectedDate);
+
+      final businessRef =
+      db.collection('businesses').doc(widget.businessId);
+
+      await db.runTransaction((tx) async {
+
+        final availabilityRef =
+        businessRef.collection('availability').doc(dateId);
+
+        // 🔹 1️⃣ PRIMERO TODOS LOS READS
+        final availabilitySnap =
+        await tx.get(availabilityRef);
+
+        final current =
+        Map<String, dynamic>.from(
+            availabilitySnap.data() ?? {});
+
+        Map<String, int> required = {};
+
+        for (var s in _services) {
+          required[s.resourceType] =
+              (required[s.resourceType] ?? 0) + 1;
+        }
+
+        for (var entry in required.entries) {
+
+          final used =
+              (current[entry.key] as num?)?.toInt() ?? 0;
+
+          current[entry.key] =
+              used + entry.value;
+        }
+
+        // 🔹 2️⃣ LUEGO TODOS LOS WRITES
+
+        final eventRef =
+        businessRef.collection('events').doc();
+
+        tx.set(eventRef, {
+          'clientName': _clientController.text.trim(),
+          'phone': _phoneController.text.trim(),
+          'locationName': _locationController.text.trim(),
+          'date': DateTime(
+            _selectedDate.year,
+            _selectedDate.month,
+            _selectedDate.day,
+          ),
+          'totalPrice': totalPrice,
+          'totalPaid': 0,
+          'services': _services.map((s) => s.toMap()).toList(),
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+
+        tx.set(
+          availabilityRef,
+          current,
+          SetOptions(merge: true),
+        );
+      });
+
+      if (!mounted) return;
+      Navigator.pop(context);
+
+    } catch (e, stack) {
+
+      debugPrint("🔥 ERROR SAVE CREATE EVENT: $e");
+      debugPrintStack(stackTrace: stack);
+
+      if (!mounted) return;
+
       showCupertinoDialog(
         context: context,
         builder: (_) => CupertinoAlertDialog(
-          title: const Text("Sin disponibilidad"),
+          title: const Text("Error"),
           content: Text(e.toString()),
           actions: [
             CupertinoDialogAction(
@@ -219,61 +293,7 @@ class _CreateEventPageState extends State<CreateEventPage> {
           ],
         ),
       );
-      return;
     }
-
-    final db = FirebaseFirestore.instance;
-    final dateId =
-    DateFormat('yyyy-MM-dd').format(_selectedDate);
-
-    final businessRef =
-    db.collection('businesses').doc(widget.businessId);
-
-    await db.runTransaction((tx) async {
-
-      final eventRef =
-      businessRef.collection('events').doc();
-
-      tx.set(eventRef, {
-        'clientName': _clientController.text.trim(),
-        'phone': _phoneController.text.trim(),
-        'locationName': _locationController.text.trim(),
-        'date': DateTime(
-          _selectedDate.year,
-          _selectedDate.month,
-          _selectedDate.day,
-        ),
-        'totalPrice': totalPrice,
-        'totalPaid': 0,
-        'services': _services.map((s) => s.toMap()).toList(),
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-
-      final availabilityRef =
-      businessRef.collection('availability').doc(dateId);
-
-      final availabilitySnap =
-      await tx.get(availabilityRef);
-
-      Map<String, dynamic> current =
-          availabilitySnap.data() ?? {};
-
-      Map<String, int> required = {};
-
-      for (var s in _services) {
-        required[s.resourceType] =
-            (required[s.resourceType] ?? 0) + 1;
-      }
-
-      for (var entry in required.entries) {
-        final used = current[entry.key] ?? 0;
-        current[entry.key] = used + entry.value;
-      }
-
-      tx.set(availabilityRef, current, SetOptions(merge: true));
-    });
-
-    Navigator.pop(context);
   }
 
   /// -------------------------------------------------

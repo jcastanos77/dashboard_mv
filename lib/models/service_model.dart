@@ -16,7 +16,7 @@ class ServiceModel {
     return ServiceModel(
       id: id,
       name: map['name'],
-      dailyCapacity: map['dailyCapacity'],
+      dailyCapacity: map['dailyCapacity'] ?? 0,
       isActive: map['isActive'] ?? true,
     );
   }

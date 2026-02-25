@@ -46,6 +46,10 @@ class _CreateEventPageState extends State<CreateEventPage> {
   void initState() {
     super.initState();
     _loadAvailability();
+    if (widget.isEditing) {
+      _loadInitialData();
+    }
+
   }
 
   /// -------------------------------------------------
@@ -139,12 +143,29 @@ class _CreateEventPageState extends State<CreateEventPage> {
         _services.add(
           SelectedService(
             serviceId: selected.id,
-            serviceName: data['name'],
-            resourceType: data['resourceType'],
+            serviceName: data['name'] ?? '',
+            resourceType: data['resourceType'] ?? '',
           ),
         );
       });
     }
+  }
+
+  Future<void> _showError(String message) async {
+    await showCupertinoDialog(
+      context: context,
+      builder: (dialogContext) => CupertinoAlertDialog(
+        title: const Text("Error"),
+        content: Text(message),
+        actions: [
+          CupertinoDialogAction(
+            child: const Text("OK"),
+            onPressed: () =>
+                Navigator.of(dialogContext).pop(),
+          ),
+        ],
+      ),
+    );
   }
 
   /// -------------------------------------------------
@@ -201,7 +222,22 @@ class _CreateEventPageState extends State<CreateEventPage> {
 
   Future<void> _save() async {
 
-    if (_clientController.text.isEmpty || _services.isEmpty) return;
+    if (_clientController.text.isEmpty || _services.isEmpty) {
+      await _showError(
+        "Todos los eventos deben tener servicio seleccionado.",
+      );
+      return;
+    }
+
+    // 🔴 VALIDAR PAQUETES
+    for (var s in _services) {
+      if (s.packageId == null) {
+        await _showError(
+          "Todos los servicios deben tener paquete seleccionado.",
+        );
+        return;
+      }
+    }
 
     try {
 
@@ -219,13 +255,11 @@ class _CreateEventPageState extends State<CreateEventPage> {
         final availabilityRef =
         businessRef.collection('availability').doc(dateId);
 
-        // 🔹 1️⃣ PRIMERO TODOS LOS READS
         final availabilitySnap =
         await tx.get(availabilityRef);
 
         final current =
-        Map<String, dynamic>.from(
-            availabilitySnap.data() ?? {});
+        Map<String, dynamic>.from(availabilitySnap.data() ?? {});
 
         Map<String, int> required = {};
 
@@ -234,8 +268,38 @@ class _CreateEventPageState extends State<CreateEventPage> {
               (required[s.resourceType] ?? 0) + 1;
         }
 
-        for (var entry in required.entries) {
+        /// 🔥 SI ESTÁ EDITANDO
+        if (widget.isEditing) {
 
+          final oldEventRef =
+          businessRef.collection('events').doc(widget.eventId);
+
+          final oldEventSnap = await tx.get(oldEventRef);
+
+          final oldServices =
+          List<Map<String, dynamic>>.from(
+              oldEventSnap['services'] ?? []);
+
+          Map<String, int> oldRequired = {};
+
+          for (var s in oldServices) {
+            final type = s['resourceType'];
+            oldRequired[type] =
+                (oldRequired[type] ?? 0) + 1;
+          }
+
+          /// 🔥 RESTAR LOS VIEJOS
+          for (var entry in oldRequired.entries) {
+            final used =
+                (current[entry.key] as num?)?.toInt() ?? 0;
+
+            current[entry.key] =
+                used - entry.value;
+          }
+        }
+
+        /// 🔥 SUMAR LOS NUEVOS
+        for (var entry in required.entries) {
           final used =
               (current[entry.key] as num?)?.toInt() ?? 0;
 
@@ -243,10 +307,9 @@ class _CreateEventPageState extends State<CreateEventPage> {
               used + entry.value;
         }
 
-        // 🔹 2️⃣ LUEGO TODOS LOS WRITES
-
-        final eventRef =
-        businessRef.collection('events').doc();
+        final eventRef = widget.isEditing
+            ? businessRef.collection('events').doc(widget.eventId)
+            : businessRef.collection('events').doc();
 
         tx.set(eventRef, {
           'clientName': _clientController.text.trim(),
@@ -271,7 +334,7 @@ class _CreateEventPageState extends State<CreateEventPage> {
       });
 
       if (!mounted) return;
-      Navigator.pop(context);
+      Navigator.pop(context, true); // cerrar editar
 
     } catch (e, stack) {
 
@@ -447,6 +510,47 @@ class _CreateEventPageState extends State<CreateEventPage> {
 
       await _loadAvailability();
     }
+  }
+
+  void _loadInitialData() {
+
+    final data = widget.initialData;
+    if (data == null) return;
+
+    _clientController.text = data['clientName'] ?? '';
+    _phoneController.text = data['phone'] ?? '';
+    _locationController.text = data['locationName'] ?? '';
+
+    final date = (data['date'] as Timestamp).toDate();
+
+    _selectedDate = DateTime(
+      date.year,
+      date.month,
+      date.day,
+    );
+
+    final services = (data['services'] ?? []) as List;
+
+    _services = services.map((s) {
+
+      final service = SelectedService(
+        serviceId: s['serviceId'],
+        serviceName: s['serviceName'] ?? '',
+        resourceType: s['resourceType'] ?? '',
+      );
+
+      service.packageId = s['packageId'];
+      service.packageName = s['packageName'];
+      service.basePrice =
+          (s['basePrice'] as num?)?.toDouble() ?? 0;
+
+      service.options =
+      List<Map<String, dynamic>>.from(
+          s['options'] ?? []);
+
+      return service;
+
+    }).toList();
   }
 
   /// -------------------------------------------------
@@ -708,7 +812,9 @@ class _CreateEventPageState extends State<CreateEventPage> {
               CupertinoButton.filled(
                 borderRadius: BorderRadius.circular(20),
                 onPressed: _save,
-                child: const Text("Crear Evento"),
+                child: Text(widget.isEditing
+                    ? "Actualizar Evento"
+                    : "Crear Evento"),
               ),
             ],
           ),

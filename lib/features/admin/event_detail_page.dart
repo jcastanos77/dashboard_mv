@@ -50,8 +50,9 @@ class _EventDetailPageState extends State<EventDetailPage> {
         trailing: CupertinoButton(
           padding: EdgeInsets.zero,
           child: const Icon(CupertinoIcons.pencil),
-          onPressed: () {
-            Navigator.push(
+          onPressed: () async{
+
+            final result = await Navigator.push(
               context,
               CupertinoPageRoute(
                 builder: (_) => CreateEventPage(
@@ -61,6 +62,10 @@ class _EventDetailPageState extends State<EventDetailPage> {
                 ),
               ),
             );
+
+            if (result == true) {
+              Navigator.pop(context, true);
+            }
           },
         ),
       ),

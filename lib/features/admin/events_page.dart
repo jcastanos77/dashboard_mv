@@ -102,6 +102,62 @@ class _EventsPageState extends State<EventsPage> {
     });
   }
 
+  Future<void> _deleteEvent(QueryDocumentSnapshot doc) async {
+
+    final db = FirebaseFirestore.instance;
+
+    final data = doc.data() as Map<String, dynamic>;
+    final eventDate = (data['date'] as Timestamp).toDate();
+
+    final dateOnly = DateTime(
+      eventDate.year,
+      eventDate.month,
+      eventDate.day,
+    );
+
+    final dateId =
+    DateFormat('yyyy-MM-dd').format(dateOnly);
+
+    final businessRef =
+    db.collection('businesses').doc(widget.businessId);
+
+    /// 1️⃣ BORRAR EVENTO
+    await doc.reference.delete();
+
+    /// 2️⃣ RELEER EVENTOS RESTANTES
+    final remainingEvents = await businessRef
+        .collection('events')
+        .where('date', isEqualTo: dateOnly)
+        .get();
+
+    Map<String, int> recalculated = {};
+
+    for (var e in remainingEvents.docs) {
+
+      final services =
+      List<Map<String, dynamic>>.from(
+          e['services'] ?? []);
+
+      for (var s in services) {
+        final type = s['resourceType'];
+
+        recalculated[type] =
+            (recalculated[type] ?? 0) + 1;
+      }
+    }
+
+    /// 3️⃣ ACTUALIZAR AVAILABILITY COMPLETO
+    final availabilityRef =
+    businessRef.collection('availability').doc(dateId);
+
+    await availabilityRef.set(
+      recalculated,
+      SetOptions(merge: false),
+    );
+
+    await _loadData();
+  }
+
   void _scrollToDate(DateTime day) {
 
     setState(() {
@@ -345,22 +401,69 @@ class _EventsPageState extends State<EventsPage> {
                   (data['services'] ??
                       []) as List;
 
-                  return GestureDetector(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        CupertinoPageRoute(
-                          builder: (_) =>
-                              EventDetailPage(
+                  return Dismissible(
+                      key: Key(doc.id),
+                      direction: DismissDirection.endToStart,
+                      background: Container(
+                        margin: const EdgeInsets.only(bottom: 14),
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        alignment: Alignment.centerRight,
+                        decoration: BoxDecoration(
+                          color: CupertinoColors.systemRed,
+                          borderRadius: BorderRadius.circular(22),
+                        ),
+                        child: const Icon(
+                          CupertinoIcons.delete,
+                          color: CupertinoColors.white,
+                        ),
+                      ),
+                      confirmDismiss: (_) async {
+
+                        return await showCupertinoDialog<bool>(
+                          context: context,
+                          builder: (_) => CupertinoAlertDialog(
+                            title: const Text("Eliminar evento"),
+                            content: const Text(
+                                "¿Seguro que quieres borrar este evento?"),
+                            actions: [
+                              CupertinoDialogAction(
+                                child: const Text("Cancelar"),
+                                onPressed: () =>
+                                    Navigator.pop(context, false),
+                              ),
+                              CupertinoDialogAction(
+                                isDestructiveAction: true,
+                                child: const Text("Eliminar"),
+                                onPressed: () =>
+                                    Navigator.pop(context, true),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                      onDismissed: (_) async {
+                        await _deleteEvent(doc);
+                      },
+                      child: GestureDetector(
+                        onTap: () async{
+
+                          final result = await Navigator.push(
+                            context,
+                            CupertinoPageRoute(
+                              builder: (_) => EventDetailPage(
                                 eventId: doc.id,
                                 eventData: data,
-                                businessId: widget
-                                    .businessId,
+                                businessId:
+                                widget.businessId,
                               ),
-                        ),
-                      );
-                    },
-                    child: Container(
+                            ),
+                          );
+
+                          if (result == true) {
+                            await _loadData();
+                          }
+                        },
+                        child: Container(
                       margin:
                       const EdgeInsets.only(
                           bottom: 14),
@@ -460,7 +563,7 @@ class _EventsPageState extends State<EventsPage> {
                           ),
                         ],
                       ),
-                    ),
+                    ),)
                   );
                 },
               ),

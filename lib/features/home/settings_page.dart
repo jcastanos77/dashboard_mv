@@ -3,10 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
-import 'package:file_picker/file_picker.dart';
 import 'dart:html' as html;
 import 'dart:typed_data';
-
 
 class SettingsPage extends StatefulWidget {
   final String businessId;
@@ -22,60 +20,11 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> {
 
-  String? businessName;
-  String? businessId;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadBusiness();
-  }
-
-  Future<void> _loadBusiness() async {
-    final snap = await FirebaseFirestore.instance
-        .collection('businesses')
-        .doc(widget.businessId)
-        .get();
-
-    if (!mounted) return;
-
-    setState(() {
-      businessName = snap.data()?['name'] ?? 'Negocio';
-      businessId = widget.businessId;
-    });
-  }
-
-  Future<void> _logout(BuildContext context) async {
-    showCupertinoDialog(
-      context: context,
-      builder: (_) =>
-          CupertinoAlertDialog(
-            title: const Text("Cerrar sesión"),
-            content: const Text("¿Seguro que deseas salir de tu cuenta?"),
-            actions: [
-              CupertinoDialogAction(
-                child: const Text("Cancelar"),
-                onPressed: () => Navigator.pop(context),
-              ),
-              CupertinoDialogAction(
-                isDestructiveAction: true,
-                child: const Text("Cerrar sesión"),
-                onPressed: () async {
-                  await FirebaseAuth.instance.signOut();
-                  Navigator.pop(context);
-                },
-              ),
-            ],
-          ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
+
     final bg = CupertinoColors.systemGroupedBackground.resolveFrom(context);
-    final cardBg = CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
-        context);
-    final label = CupertinoColors.label.resolveFrom(context);
+    final cardBg = CupertinoColors.secondarySystemGroupedBackground.resolveFrom(context);
     final secondary = CupertinoColors.secondaryLabel.resolveFrom(context);
 
     return CupertinoPageScaffold(
@@ -87,41 +36,41 @@ class _SettingsPageState extends State<SettingsPage> {
         ),
       ),
       child: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 40),
-          children: [
+        child: FutureBuilder<DocumentSnapshot>(
+          future: FirebaseFirestore.instance
+              .collection('businesses')
+              .doc(widget.businessId)
+              .get(),
+          builder: (context, snapshot) {
 
-            /// =============================
-            /// HEADER EMPRESA
-            /// =============================
+            if (!snapshot.hasData) {
+              return const Center(child: CupertinoActivityIndicator());
+            }
 
-            Container(
-              padding: const EdgeInsets.symmetric(vertical: 32),
-              decoration: BoxDecoration(
-                color: cardBg,
-                borderRadius: BorderRadius.circular(28),
-              ),
-              child: FutureBuilder<DocumentSnapshot>(
-                future: FirebaseFirestore.instance
-                    .collection('businesses')
-                    .doc(businessId)
-                    .get(),
-                builder: (context, snapshot) {
-                  if (!snapshot.hasData) {
-                    return const SizedBox(
-                      width: 110,
-                      height: 110,
-                      child: CupertinoActivityIndicator(),
-                    );
-                  }
+            final data =
+            snapshot.data!.data() as Map<String, dynamic>?;
 
-                  final data =
-                  snapshot.data!.data() as Map<String, dynamic>?;
+            final logoUrl = data?['logoUrl'];
+            final businessName = data?['name'] ?? '';
+            final resources = Map<String, dynamic>.from(
+              data?['resources'] ?? {},
+            );
 
-                  final logoUrl = data?['logoUrl'];
-                  final businessName = data?['name'] ?? '';
+            return ListView(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 40),
+              children: [
 
-                  return Column(
+                /// =============================
+                /// HEADER EMPRESA
+                /// =============================
+
+                Container(
+                  padding: const EdgeInsets.symmetric(vertical: 32),
+                  decoration: BoxDecoration(
+                    color: cardBg,
+                    borderRadius: BorderRadius.circular(28),
+                  ),
+                  child: Column(
                     children: [
 
                       GestureDetector(
@@ -151,145 +100,144 @@ class _SettingsPageState extends State<SettingsPage> {
                         ),
                       ),
                     ],
-                  );
-                },
-              ),
-            ),
-
-            const SizedBox(height: 32),
-
-            /// =============================
-            /// CUENTA
-            /// =============================
-
-            _sectionTitle("Cuenta"),
-
-            _card(
-              cardBg,
-              child: Column(
-                children: [
-
-                  _settingsTile(
-                    icon: CupertinoIcons.person,
-                    title: "Perfil",
-                    subtitle:
-                    FirebaseAuth.instance.currentUser?.email ?? "",
                   ),
-
-                  const SizedBox(height: 16),
-
-                  _settingsTile(
-                    icon: CupertinoIcons.building_2_fill,
-                    title: "Negocio",
-                    subtitle: "Mv Snacks Bar",
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 32),
-
-            /// =============================
-            /// RECURSOS (ANTES FLOTABA)
-            /// =============================
-
-            _sectionTitle("Recursos"),
-
-            _card(
-              cardBg,
-              child: Column(
-                children: [
-
-                  _settingsTile(
-                    icon: CupertinoIcons.cube_box_fill,
-                    title: "snacks_bar",
-                    subtitle: "Disponibles: 3",
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  _settingsTile(
-                    icon: CupertinoIcons.cube_box_fill,
-                    title: "elotes_bar",
-                    subtitle: "Disponibles: 2",
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 32),
-
-            /// =============================
-            /// SISTEMA
-            /// =============================
-
-            _sectionTitle("Sistema"),
-
-            _card(
-              cardBg,
-              child: Column(
-                children: [
-
-                  _settingsTile(
-                    icon: CupertinoIcons.bell,
-                    title: "Notificaciones",
-                    subtitle: "Próximamente",
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  _settingsTile(
-                    icon: CupertinoIcons.lock,
-                    title: "Privacidad",
-                    subtitle: "Próximamente",
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 40),
-
-            /// LOGOUT
-
-            CupertinoButton(
-              color: CupertinoColors.systemRed.withOpacity(0.12),
-              borderRadius: BorderRadius.circular(18),
-              onPressed: () => _logout(context),
-              child: const Text(
-                "Cerrar sesión",
-                style: TextStyle(
-                  color: CupertinoColors.systemRed,
-                  fontWeight: FontWeight.w600,
                 ),
-              ),
-            ),
 
-            const SizedBox(height: 30),
+                const SizedBox(height: 32),
 
-            Center(
-              child: Text(
-                "Dashboard MV Snacks v1.0",
-                style: TextStyle(
-                  fontSize: 12,
-                  color: secondary,
+                /// =============================
+                /// CUENTA
+                /// =============================
+
+                _sectionTitle("Cuenta"),
+
+                _card(
+                  cardBg,
+                  child: Column(
+                    children: [
+
+                      _settingsTile(
+                        icon: CupertinoIcons.person,
+                        title: "Perfil",
+                        subtitle:
+                        FirebaseAuth.instance.currentUser?.email ?? "",
+                      ),
+
+                      const SizedBox(height: 16),
+
+                      _settingsTile(
+                        icon: CupertinoIcons.building_2_fill,
+                        title: "Negocio",
+                        subtitle: businessName,
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ),
-            const SizedBox(height: 62),
-          ],
+
+                const SizedBox(height: 32),
+
+                /// =============================
+                /// RECURSOS
+                /// =============================
+
+                _sectionTitle("Recursos"),
+
+                _card(
+                  cardBg,
+                  child: Column(
+                    children: resources.isEmpty
+                        ? [
+                      const Text("Sin recursos configurados"),
+                    ]
+                        : resources.entries.map((entry) {
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        child: _settingsTile(
+                          icon: CupertinoIcons.cube_box_fill,
+                          title: _formatResourceName(entry.key),
+                          subtitle: "Disponibles: ${entry.value}",
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+
+                const SizedBox(height: 32),
+
+                /// =============================
+                /// SISTEMA
+                /// =============================
+
+                _sectionTitle("Sistema"),
+
+                _card(
+                  cardBg,
+                  child: Column(
+                    children: [
+
+                      _settingsTile(
+                        icon: CupertinoIcons.bell,
+                        title: "Notificaciones",
+                        subtitle: "Próximamente",
+                      ),
+
+                      const SizedBox(height: 16),
+
+                      _settingsTile(
+                        icon: CupertinoIcons.lock,
+                        title: "Privacidad",
+                        subtitle: "Próximamente",
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 40),
+
+                CupertinoButton(
+                  color: CupertinoColors.systemRed.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(18),
+                  onPressed: () => _logout(context),
+                  child: const Text(
+                    "Cerrar sesión",
+                    style: TextStyle(
+                      color: CupertinoColors.systemRed,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 30),
+
+                Center(
+                  child: Text(
+                    "Dashboard MV Snacks v1.0",
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: secondary,
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 62),
+              ],
+            );
+          },
         ),
       ),
     );
   }
 
-  Future<void> _pickAndUploadLogo() async {
+  Future<void> _logout(BuildContext context) async {
+    await FirebaseAuth.instance.signOut();
+  }
 
+  Future<void> _pickAndUploadLogo() async {
     final uploadInput = html.FileUploadInputElement();
     uploadInput.accept = 'image/*';
     uploadInput.click();
 
     uploadInput.onChange.listen((event) async {
-
       final file = uploadInput.files?.first;
       if (file == null) return;
 
@@ -297,7 +245,6 @@ class _SettingsPageState extends State<SettingsPage> {
       reader.readAsArrayBuffer(file);
 
       reader.onLoadEnd.listen((event) async {
-
         final bytes = reader.result as Uint8List;
 
         final ref = FirebaseStorage.instance
@@ -310,17 +257,22 @@ class _SettingsPageState extends State<SettingsPage> {
         await FirebaseFirestore.instance
             .collection('businesses')
             .doc(widget.businessId)
-            .update({
-          'logoUrl': url,
-        });
+            .update({'logoUrl': url});
 
         setState(() {});
       });
     });
   }
 
+  String _formatResourceName(String key) {
+    return key
+        .replaceAll('_', ' ')
+        .split(' ')
+        .map((word) =>
+    word[0].toUpperCase() + word.substring(1).toLowerCase())
+        .join(' ');
+  }
 }
-
 
   Widget _sectionTitle(String title) {
     return Padding(

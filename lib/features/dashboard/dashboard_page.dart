@@ -1,247 +1,265 @@
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../../core/business_helper.dart';
+import 'package:intl/intl.dart';
+import 'package:intl/intl.dart';
 
 class DashboardPage extends StatefulWidget {
   final String businessId;
-  const DashboardPage({super.key, required this.businessId});
+
+  const DashboardPage({
+    super.key,
+    required this.businessId,
+  });
 
   @override
-  State<DashboardPage> createState() =>
-      _DashboardPageState();
+  State<DashboardPage> createState() => _DashboardPageState();
 }
 
-class _DashboardPageState
-    extends State<DashboardPage> {
+class _DashboardPageState extends State<DashboardPage> {
+  String _money(num value) => NumberFormat.currency(
+    locale: 'en_US',
+    symbol: '\$',
+    decimalDigits: 2,
+  ).format(value);
 
   @override
   Widget build(BuildContext context) {
-    final businessId = widget.businessId;
+    final now = DateTime.now();
+    final yearStart = DateTime(now.year, 1, 1);
+    final nextYearStart = DateTime(now.year + 1, 1, 1);
+    final monthStart = DateTime(now.year, now.month, 1);
+    final nextMonthStart = DateTime(now.year, now.month + 1, 1);
+    final decemberStart = DateTime(now.year, 12, 1);
+    final januaryNextYear = DateTime(now.year + 1, 1, 1);
+    final todayStart = DateTime(now.year, now.month, now.day);
+    final tomorrowStart = todayStart.add(const Duration(days: 1));
 
-        final now = DateTime.now();
-        final startMonth =
-        DateTime(now.year, now.month, 1);
-        final endMonth =
-        DateTime(now.year, now.month + 1, 1);
+    final eventsQuery = FirebaseFirestore.instance
+        .collection('businesses')
+        .doc(widget.businessId)
+        .collection('events')
+        .where('date', isGreaterThanOrEqualTo: yearStart)
+        .where('date', isLessThan: nextYearStart);
 
-        final todayStart =
-        DateTime(now.year, now.month, now.day);
-        final todayEnd =
-        todayStart.add(const Duration(days: 1));
+    return CupertinoPageScaffold(
+      backgroundColor: const Color(0xFFF2F2F7),
+      navigationBar: const CupertinoNavigationBar(
+        transitionBetweenRoutes: false,
+        middle: Text(
+          'Dashboard',
+          style: TextStyle(fontWeight: FontWeight.w600),
+        ),
+      ),
+      child: SafeArea(
+        child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: eventsQuery.snapshots(),
+          builder: (context, snap) {
+            if (snap.hasError) {
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Text(
+                    'No se pudieron cargar las finanzas.\n${snap.error}',
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              );
+            }
 
-        return CupertinoPageScaffold(
-          backgroundColor:
-          const Color(0xFFF2F2F7),
+            if (!snap.hasData) {
+              return const Center(
+                child: CupertinoActivityIndicator(),
+              );
+            }
 
-          navigationBar:
-          const CupertinoNavigationBar(
-            transitionBetweenRoutes: false,
-            middle: Text(
-              "Dashboard",
-              style: TextStyle(
-                fontWeight:
-                FontWeight.w600,
-              ),
-            ),
-          ),
+            double monthSales = 0;
+            double monthPaid = 0;
+            double yearSales = 0;
+            double yearPaid = 0;
+            double decemberSales = 0;
+            double decemberPaid = 0;
+            int decemberEvents = 0;
 
-          child: SafeArea(
-            child: StreamBuilder<
-                QuerySnapshot>(
-              stream: FirebaseFirestore
-                  .instance
-                  .collection(
-                  'businesses')
-                  .doc(businessId)
-                  .collection('events')
-                  .where('date',
-                  isGreaterThanOrEqualTo:
-                  startMonth)
-                  .where('date',
-                  isLessThan:
-                  endMonth)
-                  .snapshots(),
-              builder:
-                  (context, snap) {
+            int todayCount = 0;
+            int upcomingCount = 0;
 
-                if (!snap.hasData) {
-                  return const Center(
-                    child:
-                    CupertinoActivityIndicator(),
-                  );
-                }
+            for (final doc in snap.data!.docs) {
+              final data = doc.data();
 
-                final events =
-                    snap.data!.docs;
+              final price = (data['totalPrice'] as num?)?.toDouble() ?? 0;
+              final paid = (data['totalPaid'] as num?)?.toDouble() ?? 0;
 
-                double totalSales = 0;
-                double totalPaid = 0;
+              final rawDate = data['date'];
+              if (rawDate is! Timestamp) continue;
 
-                int todayCount = 0;
-                int upcomingCount = 0;
+              final date = rawDate.toDate();
+              final eventDay = DateTime(date.year, date.month, date.day);
 
-                for (var doc in events) {
-                  final data =
-                  doc.data()
-                  as Map<String,
-                      dynamic>;
+              // Totales de todo el año actual.
+              yearSales += price;
+              yearPaid += paid;
 
-                  final price =
-                  (data['totalPrice']
-                      ?? 0)
-                  as num;
+              // Totales del mes actual.
+              if (!eventDay.isBefore(monthStart) &&
+                  eventDay.isBefore(nextMonthStart)) {
+                monthSales += price;
+                monthPaid += paid;
+              }
 
-                  final paid =
-                  (data['totalPaid']
-                      ?? 0)
-                  as num;
+              if (!eventDay.isBefore(decemberStart) &&
+                  eventDay.isBefore(januaryNextYear)) {
+                decemberSales += price;
+                decemberPaid += paid;
+                decemberEvents++;
+              }
 
-                  totalSales +=
-                      price.toDouble();
-                  totalPaid +=
-                      paid.toDouble();
+              if (!eventDay.isBefore(todayStart) &&
+                  eventDay.isBefore(tomorrowStart)) {
+                todayCount++;
+              } else if (eventDay.isAfter(todayStart)) {
+                upcomingCount++;
+              }
+            }
 
-                  final date =
-                  (data['date']
-                  as Timestamp)
-                      .toDate();
+            final monthPending = monthSales - monthPaid;
+            final yearPending = yearSales - yearPaid;
+            final decemberPending = decemberSales - decemberPaid;
 
-                  if (date
-                      .isAfter(
-                      todayStart) &&
-                      date.isBefore(
-                          todayEnd)) {
-                    todayCount++;
-                  }
+            return ListView(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
+              children: [
+                _sectionTitle('Finanzas del mes'),
+                _card(
+                  'Ingresos del mes',
+                  _money(monthPaid),
+                  CupertinoColors.systemGreen,
+                ),
+                _card(
+                  'Ventas totales del mes',
+                  _money(monthSales),
+                  CupertinoColors.systemBlue,
+                ),
+                _card(
+                  'Pendiente por cobrar del mes',
+                  _money(monthPending),
+                  CupertinoColors.systemRed,
+                ),
 
-                  if (date.isAfter(
-                      now)) {
-                    upcomingCount++;
-                  }
-                }
+                const SizedBox(height: 18),
 
-                final pending =
-                    totalSales -
-                        totalPaid;
+                _sectionTitle('Proyección de diciembre ${now.year}'),
+                _card(
+                  'Ventas de eventos agendados',
+                  _money(decemberSales),
+                  CupertinoColors.systemBlue,
+                ),
+                _card(
+                  'Ya cobrado de esos eventos',
+                  _money(decemberPaid),
+                  CupertinoColors.systemGreen,
+                ),
+                _card(
+                  'Pendiente por cobrar',
+                  _money(decemberPending),
+                  CupertinoColors.systemRed,
+                ),
+                _card(
+                  'Eventos agendados',
+                  '$decemberEvents',
+                  CupertinoColors.systemPurple,
+                ),
 
-                return ListView(
-                  padding:
-                  const EdgeInsets
-                      .fromLTRB(
-                      16,
-                      16,
-                      16,
-                      120),
-                  children: [
+                const SizedBox(height: 18),
 
-                    _sectionTitle(
-                        "Finanzas"),
+                _sectionTitle('Finanzas del año ${now.year}'),
+                _card(
+                  'Ingresos del año',
+                  _money(yearPaid),
+                  CupertinoColors.systemGreen,
+                ),
+                _card(
+                  'Ventas totales del año',
+                  _money(yearSales),
+                  CupertinoColors.systemBlue,
+                ),
+                _card(
+                  'Pendiente por cobrar del año',
+                  _money(yearPending),
+                  CupertinoColors.systemRed,
+                ),
 
-                    _card(
-                      "Ingresos del mes",
-                      "\$${totalPaid.toStringAsFixed(2)}",
-                      CupertinoColors
-                          .systemGreen,
+                const SizedBox(height: 10),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: Text(
+                    'Los ingresos representan los pagos registrados. '
+                        'Para calcular ganancias netas reales, también se deben '
+                        'registrar y restar los costos y gastos.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: CupertinoColors.secondaryLabel.resolveFrom(context),
                     ),
+                  ),
+                ),
 
-                    _card(
-                      "Ventas totales mes",
-                      "\$${totalSales.toStringAsFixed(2)}",
-                      CupertinoColors
-                          .systemBlue,
-                    ),
+                const SizedBox(height: 24),
 
-                    _card(
-                      "Pendiente por cobrar",
-                      "\$${pending.toStringAsFixed(2)}",
-                      CupertinoColors
-                          .systemRed,
-                    ),
-
-                    const SizedBox(
-                        height: 24),
-
-                    _sectionTitle(
-                        "Operación"),
-
-                    _card(
-                      "Eventos hoy",
-                      "$todayCount",
-                      CupertinoColors
-                          .systemOrange,
-                    ),
-
-                    _card(
-                      "Próximos eventos",
-                      "$upcomingCount",
-                      CupertinoColors
-                          .systemPurple,
-                    ),
-                  ],
-                );
-              },
-            ),
-          ),
-        );
-  }
-
-  Widget _sectionTitle(String text) {
-    return Padding(
-      padding:
-      const EdgeInsets.only(
-          bottom: 10),
-      child: Text(
-        text,
-        style: const TextStyle(
-          fontSize: 15,
-          fontWeight: FontWeight.w600,
-          color:
-          CupertinoColors
-              .inactiveGray,
+                _sectionTitle('Operación'),
+                _card(
+                  'Eventos hoy',
+                  '$todayCount',
+                  CupertinoColors.systemOrange,
+                ),
+                _card(
+                  'Próximos eventos del año',
+                  '$upcomingCount',
+                  CupertinoColors.systemPurple,
+                ),
+              ],
+            );
+          },
         ),
       ),
     );
   }
 
-  Widget _card(
-      String title,
-      String value,
-      Color color) {
+  Widget _sectionTitle(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Text(
+        text,
+        style: const TextStyle(
+          fontSize: 15,
+          fontWeight: FontWeight.w600,
+          color: CupertinoColors.inactiveGray,
+        ),
+      ),
+    );
+  }
 
+  Widget _card(String title, String value, Color color) {
     return Container(
-      margin:
-      const EdgeInsets.only(
-          bottom: 14),
-      padding:
-      const EdgeInsets.all(
-          16),
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color:
-        CupertinoColors.white,
-        borderRadius:
-        BorderRadius.circular(
-            20),
+        color: CupertinoColors.white,
+        borderRadius: BorderRadius.circular(24),
       ),
       child: Row(
-        mainAxisAlignment:
-        MainAxisAlignment
-            .spaceBetween,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 15,
+          Expanded(
+            child: Text(
+              title,
+              style: const TextStyle(fontSize: 15),
             ),
           ),
-
+          const SizedBox(width: 12),
           Text(
             value,
             style: TextStyle(
               fontSize: 17,
-              fontWeight:
-              FontWeight.w600,
+              fontWeight: FontWeight.w600,
               color: color,
             ),
           ),

@@ -25,7 +25,7 @@ class _CreateEventPageState extends State<CreateEventPage> {
   final _clientController = TextEditingController();
   final _phoneController = TextEditingController();
   final _locationController = TextEditingController();
-
+  bool _loadingServices = false;
   DateTime _selectedDate = DateTime.now();
 
   List<SelectedService> _services = [];
@@ -45,11 +45,13 @@ class _CreateEventPageState extends State<CreateEventPage> {
   @override
   void initState() {
     super.initState();
-    _loadAvailability();
+
+    // Cargar primero los datos del evento para conocer su fecha real.
     if (widget.isEditing) {
       _loadInitialData();
     }
 
+    _loadAvailability();
   }
 
   /// -------------------------------------------------
@@ -57,97 +59,191 @@ class _CreateEventPageState extends State<CreateEventPage> {
   /// -------------------------------------------------
 
   Future<void> _loadAvailability() async {
+    if (!mounted) return;
 
     setState(() => _loadingAvailability = true);
 
-    final db = FirebaseFirestore.instance;
+    try {
+      final db = FirebaseFirestore.instance;
+      final businessRef = db.collection('businesses').doc(widget.businessId);
 
-    final businessDoc = await db
-        .collection('businesses')
-        .doc(widget.businessId)
-        .get();
+      final businessSnap = await businessRef.get();
+      final resources = Map<String, dynamic>.from(
+        businessSnap.data()?['resources'] ?? {},
+      );
 
-    final resources =
-    Map<String, dynamic>.from(businessDoc.data()?['resources'] ?? {});
+      final selectedDateId =
+      DateFormat('yyyy-MM-dd').format(_selectedDate);
 
-    final dateId =
-    DateFormat('yyyy-MM-dd').format(_selectedDate);
+      final availabilitySnap = await businessRef
+          .collection('availability')
+          .doc(selectedDateId)
+          .get();
 
-    final availabilitySnap = await db
-        .collection('businesses')
-        .doc(widget.businessId)
-        .collection('availability')
-        .doc(dateId)
-        .get();
+      final used = Map<String, dynamic>.from(
+        availabilitySnap.data() ?? {},
+      );
 
-    final used =
-    Map<String, dynamic>.from(availabilitySnap.data() ?? {});
+      // Al editar, devolver temporalmente los recursos que ya ocupa
+      // este mismo evento, pero solo si seguimos en su fecha original.
+      if (widget.isEditing && widget.eventId != null) {
+        final eventSnap = await businessRef
+            .collection('events')
+            .doc(widget.eventId)
+            .get();
 
-    Map<String, int> result = {};
+        final eventData = eventSnap.data();
+        final rawDate = eventData?['date'];
+        DateTime? oldDate;
 
-    for (var entry in resources.entries) {
+        if (rawDate is Timestamp) {
+          oldDate = rawDate.toDate();
+        } else if (rawDate is DateTime) {
+          oldDate = rawDate;
+        } else {
+          final initialDate = widget.initialData?['date'];
+          if (initialDate is Timestamp) {
+            oldDate = initialDate.toDate();
+          } else if (initialDate is DateTime) {
+            oldDate = initialDate;
+          }
+        }
 
-      final total = (entry.value as num?)?.toInt() ?? 0;
-      final usedCount = (used[entry.key] as num?)?.toInt() ?? 0;
+        if (oldDate != null &&
+            DateFormat('yyyy-MM-dd').format(oldDate) == selectedDateId) {
+          final oldServices = List<Map<String, dynamic>>.from(
+            eventData?['services'] ?? widget.initialData?['services'] ?? [],
+          );
 
-      result[entry.key] = total - usedCount;
+          for (final service in oldServices) {
+            final resourceType =
+            (service['resourceType'] as String? ?? '').trim();
+
+            if (resourceType.isEmpty) continue;
+
+            final count = (used[resourceType] as num?)?.toInt() ?? 0;
+            used[resourceType] = (count - 1).clamp(0, 999999);
+          }
+        }
+      }
+
+      final result = <String, int>{};
+
+      for (final entry in resources.entries) {
+        final resourceType = entry.key.trim();
+        if (resourceType.isEmpty) continue;
+
+        final total = (entry.value as num?)?.toInt() ?? 0;
+        final usedCount = (used[resourceType] as num?)?.toInt() ?? 0;
+
+        result[resourceType] = total - usedCount;
+      }
+
+      if (!mounted) return;
+
+      setState(() {
+        _availableResources = result;
+        _loadingAvailability = false;
+      });
+    } catch (e, stack) {
+      debugPrint('Error al cargar disponibilidad: $e');
+      debugPrintStack(stackTrace: stack);
+
+      if (!mounted) return;
+
+      setState(() {
+        _loadingAvailability = false;
+      });
+
+      await _showError('No se pudo cargar la disponibilidad.\n\n$e');
     }
-
-
-    setState(() {
-      _availableResources = result;
-      _loadingAvailability = false;
-    });
   }
 
   /// -------------------------------------------------
   /// ADD SERVICE
   /// -------------------------------------------------
 
+
   Future<void> _addService() async {
+    if (_loadingServices) return;
 
-    final snap = await FirebaseFirestore.instance
-        .collection('businesses')
-        .doc(widget.businessId)
-        .collection('services')
-        .where('isActive', isEqualTo: true)
-        .get();
+    setState(() => _loadingServices = true);
 
-    if (snap.docs.isEmpty) return;
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('businesses')
+          .doc(widget.businessId)
+          .collection('services')
+          .where('isActive', isEqualTo: true)
+          .get();
 
-    final selected = await showCupertinoModalPopup<DocumentSnapshot>(
-      context: context,
-      builder: (_) {
-        return Container(
-          height: 350,
-          color: CupertinoColors.systemBackground.resolveFrom(context),
-          child: ListView(
-            children: snap.docs.map((doc) {
-              final data = doc.data() as Map<String, dynamic>;
-              return CupertinoButton(
-                child: Text(data['name']),
-                onPressed: () {
-                  Navigator.pop(context, doc);
-                },
-              );
-            }).toList(),
-          ),
+      if (!mounted) return;
+
+      if (snap.docs.isEmpty) {
+        await _showError('No hay servicios activos configurados.');
+        return;
+      }
+
+      final selected = await showCupertinoModalPopup<
+          QueryDocumentSnapshot<Map<String, dynamic>>>(
+        context: context,
+        builder: (modalContext) {
+          return Container(
+            height: 350,
+            color: CupertinoColors.systemBackground.resolveFrom(modalContext),
+            child: SafeArea(
+              top: false,
+              child: ListView(
+                children: snap.docs.map((doc) {
+                  final data = doc.data();
+
+                  return CupertinoButton(
+                    child: Text(data['name'] ?? 'Sin nombre'),
+                    onPressed: () => Navigator.of(modalContext).pop(doc),
+                  );
+                }).toList(),
+              ),
+            ),
+          );
+        },
+      );
+
+      if (!mounted || selected == null) return;
+
+      final data = selected.data();
+      final resourceType =
+      (data['resourceType'] as String? ?? '').trim();
+
+      if (resourceType.isEmpty) {
+        await _showError(
+          'El servicio "${data['name'] ?? 'Sin nombre'}" no tiene '
+              'configurado el campo resourceType en Firestore.',
         );
-      },
-    );
-
-    if (selected != null) {
-      final data = selected.data() as Map<String, dynamic>;
+        return;
+      }
 
       setState(() {
         _services.add(
           SelectedService(
             serviceId: selected.id,
             serviceName: data['name'] ?? '',
-            resourceType: data['resourceType'] ?? '',
+            resourceType: resourceType,
           ),
         );
       });
+    } catch (e, stack) {
+      debugPrint('Error al cargar barras: $e');
+      debugPrintStack(stackTrace: stack);
+
+      if (mounted) {
+        await _showError(
+          'No se pudieron cargar las barras. Intenta nuevamente.\n\n$e',
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _loadingServices = false);
+      }
     }
   }
 
@@ -169,193 +265,204 @@ class _CreateEventPageState extends State<CreateEventPage> {
   }
 
   /// -------------------------------------------------
-  /// VALIDATE RESOURCES
-  /// -------------------------------------------------
-
-  Future<void> _validateResources() async {
-
-    final db = FirebaseFirestore.instance;
-
-    final businessDoc = await db
-        .collection('businesses')
-        .doc(widget.businessId)
-        .get();
-
-    final resources =
-    Map<String, dynamic>.from(businessDoc.data()?['resources'] ?? {});
-
-    final dateId =
-    DateFormat('yyyy-MM-dd').format(_selectedDate);
-
-    final availabilitySnap = await db
-        .collection('businesses')
-        .doc(widget.businessId)
-        .collection('availability')
-        .doc(dateId)
-        .get();
-
-    final used =
-    Map<String, dynamic>.from(availabilitySnap.data() ?? {});
-
-    Map<String, int> required = {};
-
-    for (var s in _services) {
-      required[s.resourceType] =
-          (required[s.resourceType] ?? 0) + 1;
-    }
-
-    for (var entry in required.entries) {
-
-      final total = (resources[entry.key] as num?)?.toInt() ?? 0;
-      final usedCount = (used[entry.key] as num?)?.toInt() ?? 0;
-
-      if (usedCount + entry.value > total) {
-        throw Exception(
-            "No hay suficientes barras para ${entry.key}");
-      }
-    }
-  }
-
-  /// -------------------------------------------------
   /// SAVE EVENT
   /// -------------------------------------------------
 
   Future<void> _save() async {
-
-    if (_clientController.text.isEmpty || _services.isEmpty) {
+    if (_clientController.text.trim().isEmpty || _services.isEmpty) {
       await _showError(
-        "Todos los eventos deben tener servicio seleccionado.",
+        'Todos los eventos deben tener cliente y al menos un servicio seleccionado.',
       );
       return;
     }
 
-    // 🔴 VALIDAR PAQUETES
-    for (var s in _services) {
-      if (s.packageId == null) {
+    for (final service in _services) {
+      if (service.packageId == null) {
         await _showError(
-          "Todos los servicios deben tener paquete seleccionado.",
+          'Todos los servicios deben tener paquete seleccionado.',
+        );
+        return;
+      }
+
+      if (service.resourceType.trim().isEmpty) {
+        await _showError(
+          'El servicio "${service.serviceName}" no tiene configurado '
+              'su tipo de recurso en Firestore.',
         );
         return;
       }
     }
 
     try {
-
-      await _validateResources();
-
       final db = FirebaseFirestore.instance;
-      final dateId =
-      DateFormat('yyyy-MM-dd').format(_selectedDate);
+      final businessRef = db.collection('businesses').doc(widget.businessId);
+      final eventRef = widget.isEditing
+          ? businessRef.collection('events').doc(widget.eventId)
+          : businessRef.collection('events').doc();
 
-      final businessRef =
-      db.collection('businesses').doc(widget.businessId);
+      final newDate = DateTime(
+        _selectedDate.year,
+        _selectedDate.month,
+        _selectedDate.day,
+      );
+      final newDateId = DateFormat('yyyy-MM-dd').format(newDate);
+      final newAvailabilityRef =
+      businessRef.collection('availability').doc(newDateId);
 
       await db.runTransaction((tx) async {
+        // Leer primero el evento anterior para conocer la fecha original.
+        DocumentSnapshot<Map<String, dynamic>>? oldEventSnap;
+        Map<String, dynamic>? oldEventData;
 
-        final availabilityRef =
-        businessRef.collection('availability').doc(dateId);
-
-        final availabilitySnap =
-        await tx.get(availabilityRef);
-
-        final current =
-        Map<String, dynamic>.from(availabilitySnap.data() ?? {});
-
-        Map<String, int> required = {};
-
-        for (var s in _services) {
-          required[s.resourceType] =
-              (required[s.resourceType] ?? 0) + 1;
-        }
-
-        /// 🔥 SI ESTÁ EDITANDO
         if (widget.isEditing) {
+          oldEventSnap = await tx.get(eventRef);
+          oldEventData = oldEventSnap.data();
 
-          final oldEventRef =
-          businessRef.collection('events').doc(widget.eventId);
-
-          final oldEventSnap = await tx.get(oldEventRef);
-
-          final oldServices =
-          List<Map<String, dynamic>>.from(
-              oldEventSnap['services'] ?? []);
-
-          Map<String, int> oldRequired = {};
-
-          for (var s in oldServices) {
-            final type = s['resourceType'];
-            oldRequired[type] =
-                (oldRequired[type] ?? 0) + 1;
-          }
-
-          /// 🔥 RESTAR LOS VIEJOS
-          for (var entry in oldRequired.entries) {
-            final used =
-                (current[entry.key] as num?)?.toInt() ?? 0;
-
-            current[entry.key] =
-                used - entry.value;
+          if (!oldEventSnap.exists || oldEventData == null) {
+            throw Exception('No se encontró el evento que intentas editar.');
           }
         }
 
-        /// 🔥 SUMAR LOS NUEVOS
-        for (var entry in required.entries) {
-          final used =
-              (current[entry.key] as num?)?.toInt() ?? 0;
+        DateTime? oldDate;
+        if (oldEventData != null) {
+          final rawDate = oldEventData['date'];
 
-          current[entry.key] =
-              used + entry.value;
+          if (rawDate is Timestamp) {
+            oldDate = rawDate.toDate();
+          } else if (rawDate is DateTime) {
+            oldDate = rawDate;
+          }
         }
 
-        final eventRef = widget.isEditing
-            ? businessRef.collection('events').doc(widget.eventId)
-            : businessRef.collection('events').doc();
+        // Compatibilidad por si el documento antiguo no tiene fecha.
+        oldDate ??= newDate;
 
-        tx.set(eventRef, {
+        final oldDateOnly = DateTime(
+          oldDate.year,
+          oldDate.month,
+          oldDate.day,
+        );
+        final oldDateId = DateFormat('yyyy-MM-dd').format(oldDateOnly);
+        final sameDate = oldDateId == newDateId;
+
+        final oldAvailabilityRef =
+        businessRef.collection('availability').doc(oldDateId);
+
+        // Leer todas las disponibilidades antes de escribir.
+        final newAvailabilitySnap = await tx.get(newAvailabilityRef);
+
+        DocumentSnapshot<Map<String, dynamic>>? oldAvailabilitySnap;
+        if (widget.isEditing && !sameDate) {
+          oldAvailabilitySnap = await tx.get(oldAvailabilityRef);
+        }
+
+        final newCurrent = <String, dynamic>{
+          ...?newAvailabilitySnap.data(),
+        };
+
+        final oldCurrent = sameDate
+            ? newCurrent
+            : <String, dynamic>{...?oldAvailabilitySnap?.data()};
+
+        // Contar recursos usados por los servicios del evento anterior.
+        final oldRequired = <String, int>{};
+        if (widget.isEditing && oldEventData != null) {
+          final oldServices = List<Map<String, dynamic>>.from(
+            oldEventData['services'] ?? [],
+          );
+
+          for (final service in oldServices) {
+            final resourceType =
+            (service['resourceType'] as String? ?? '').trim();
+            if (resourceType.isEmpty) continue;
+
+            oldRequired[resourceType] =
+                (oldRequired[resourceType] ?? 0) + 1;
+          }
+        }
+
+        // Contar los recursos de los servicios que se guardarán.
+        final required = <String, int>{};
+        for (final service in _services) {
+          final resourceType = service.resourceType.trim();
+
+          if (resourceType.isEmpty) {
+            throw Exception(
+              'El servicio "${service.serviceName}" no tiene resourceType.',
+            );
+          }
+
+          required[resourceType] = (required[resourceType] ?? 0) + 1;
+        }
+
+        if (widget.isEditing) {
+          if (sameDate) {
+            // Misma fecha: primero liberar la reserva anterior y después
+            // reservar los servicios nuevos, para no descontar doble.
+            for (final entry in oldRequired.entries) {
+              final used =
+                  (newCurrent[entry.key] as num?)?.toInt() ?? 0;
+              newCurrent[entry.key] =
+                  (used - entry.value).clamp(0, 999999);
+            }
+          } else {
+            // Fecha distinta: liberar los recursos de la fecha anterior.
+            for (final entry in oldRequired.entries) {
+              final used =
+                  (oldCurrent[entry.key] as num?)?.toInt() ?? 0;
+              oldCurrent[entry.key] =
+                  (used - entry.value).clamp(0, 999999);
+            }
+          }
+        }
+
+        // Reservar los recursos en la fecha seleccionada.
+        for (final entry in required.entries) {
+          final used = (newCurrent[entry.key] as num?)?.toInt() ?? 0;
+          newCurrent[entry.key] = used + entry.value;
+        }
+
+        final eventData = <String, dynamic>{
           'clientName': _clientController.text.trim(),
           'phone': _phoneController.text.trim(),
           'locationName': _locationController.text.trim(),
-          'date': DateTime(
-            _selectedDate.year,
-            _selectedDate.month,
-            _selectedDate.day,
-          ),
+          'date': newDate,
           'totalPrice': totalPrice,
-          'totalPaid': 0,
-          'services': _services.map((s) => s.toMap()).toList(),
-          'createdAt': FieldValue.serverTimestamp(),
-        });
+          'totalPaid': oldEventData?['totalPaid'] ?? 0,
+          'services': _services.map((service) => service.toMap()).toList(),
+          'createdAt': oldEventData?['createdAt'] ??
+              FieldValue.serverTimestamp(),
+        };
+
+        // Evitar que una clave vacía heredada provoque error en Firestore.
+        newCurrent.remove('');
+        oldCurrent.remove('');
+
+        tx.set(eventRef, eventData);
 
         tx.set(
-          availabilityRef,
-          current,
+          newAvailabilityRef,
+          newCurrent,
           SetOptions(merge: true),
         );
+
+        if (widget.isEditing && !sameDate) {
+          tx.set(
+            oldAvailabilityRef,
+            oldCurrent,
+            SetOptions(merge: true),
+          );
+        }
       });
 
       if (!mounted) return;
-      Navigator.pop(context, true); // cerrar editar
-
+      Navigator.pop(context, true);
     } catch (e, stack) {
-
-      debugPrint("🔥 ERROR SAVE CREATE EVENT: $e");
+      debugPrint('🔥 ERROR SAVE CREATE EVENT: $e');
       debugPrintStack(stackTrace: stack);
 
       if (!mounted) return;
-
-      showCupertinoDialog(
-        context: context,
-        builder: (_) => CupertinoAlertDialog(
-          title: const Text("Error"),
-          content: Text(e.toString()),
-          actions: [
-            CupertinoDialogAction(
-              child: const Text("OK"),
-              onPressed: () => Navigator.pop(context),
-            )
-          ],
-        ),
-      );
+      await _showError('No se pudo guardar el evento: $e');
     }
   }
 
@@ -521,13 +628,17 @@ class _CreateEventPageState extends State<CreateEventPage> {
     _phoneController.text = data['phone'] ?? '';
     _locationController.text = data['locationName'] ?? '';
 
-    final date = (data['date'] as Timestamp).toDate();
+    final rawDate = data['date'];
+    final DateTime date;
+    if (rawDate is Timestamp) {
+      date = rawDate.toDate();
+    } else if (rawDate is DateTime) {
+      date = rawDate;
+    } else {
+      date = DateTime.now();
+    }
 
-    _selectedDate = DateTime(
-      date.year,
-      date.month,
-      date.day,
-    );
+    _selectedDate = DateTime(date.year, date.month, date.day);
 
     final services = (data['services'] ?? []) as List;
 
@@ -553,6 +664,14 @@ class _CreateEventPageState extends State<CreateEventPage> {
     }).toList();
   }
 
+  @override
+  void dispose() {
+    _clientController.dispose();
+    _phoneController.dispose();
+    _locationController.dispose();
+    super.dispose();
+  }
+
   /// -------------------------------------------------
   /// UI
   /// -------------------------------------------------
@@ -560,268 +679,271 @@ class _CreateEventPageState extends State<CreateEventPage> {
   @override
   Widget build(BuildContext context) {
 
-      final bg = CupertinoColors.systemGroupedBackground.resolveFrom(context);
-      final cardBg = CupertinoColors.secondarySystemGroupedBackground.resolveFrom(context);
-      final label = CupertinoColors.label.resolveFrom(context);
-      final secondary = CupertinoColors.secondaryLabel.resolveFrom(context);
+    final bg = CupertinoColors.systemGroupedBackground.resolveFrom(context);
+    final cardBg = CupertinoColors.secondarySystemGroupedBackground.resolveFrom(context);
+    final label = CupertinoColors.label.resolveFrom(context);
+    final secondary = CupertinoColors.secondaryLabel.resolveFrom(context);
 
-      return CupertinoPageScaffold(
-        backgroundColor: bg,
-        navigationBar: CupertinoNavigationBar(
-          middle: Text(widget.isEditing ? "Editar Evento" : "Nuevo Evento"),
-        ),
-        child: SafeArea(
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(20, 12, 20, 40),
-            children: [
+    return CupertinoPageScaffold(
+      backgroundColor: bg,
+      navigationBar: CupertinoNavigationBar(
+        middle: Text(widget.isEditing ? "Editar Evento" : "Nuevo Evento"),
+      ),
+      child: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 40),
+          children: [
 
-              /// =============================
-              /// FECHA + DISPONIBILIDAD
-              /// =============================
+            /// =============================
+            /// FECHA + DISPONIBILIDAD
+            /// =============================
 
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: cardBg,
-                  borderRadius: BorderRadius.circular(24),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: cardBg,
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
 
-                    Text(
-                      "Fecha del evento",
+                  Text(
+                    "Fecha del evento",
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: secondary,
+                    ),
+                  ),
+
+                  const SizedBox(height: 6),
+
+                  CupertinoButton(
+                    padding: EdgeInsets.zero,
+                    onPressed: _pickDate,
+                    child: Text(
+                      DateFormat('dd MMM yyyy').format(_selectedDate),
                       style: TextStyle(
-                        fontSize: 13,
+                        fontSize: 20,
                         fontWeight: FontWeight.w600,
-                        color: secondary,
+                        color: label,
                       ),
                     ),
+                  ),
 
-                    const SizedBox(height: 6),
+                  const SizedBox(height: 18),
 
-                    CupertinoButton(
-                      padding: EdgeInsets.zero,
-                      onPressed: _pickDate,
-                      child: Text(
-                        DateFormat('dd MMM yyyy').format(_selectedDate),
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w600,
-                          color: label,
-                        ),
-                      ),
-                    ),
+                  if (!_loadingAvailability)
+                    Column(
+                      children: _availableResources.entries.map((e) {
 
-                    const SizedBox(height: 18),
+                        final available = e.value;
 
-                    if (!_loadingAvailability)
-                      Column(
-                        children: _availableResources.entries.map((e) {
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
 
-                          final available = e.value;
+                              Text(
+                                e.key.replaceAll('_', ' ').toUpperCase(),
+                                style: TextStyle(color: label),
+                              ),
 
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 8),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-
-                                Text(
-                                  e.key.replaceAll('_', ' ').toUpperCase(),
-                                  style: TextStyle(color: label),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: available <= 0
+                                      ? CupertinoColors.systemRed.withOpacity(.15)
+                                      : CupertinoColors.systemGreen.withOpacity(.15),
+                                  borderRadius: BorderRadius.circular(14),
                                 ),
-
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 12, vertical: 6),
-                                  decoration: BoxDecoration(
+                                child: Text(
+                                  available <= 0
+                                      ? "FULL"
+                                      : "$available disponibles",
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w600,
                                     color: available <= 0
-                                        ? CupertinoColors.systemRed.withOpacity(.15)
-                                        : CupertinoColors.systemGreen.withOpacity(.15),
-                                    borderRadius: BorderRadius.circular(14),
+                                        ? CupertinoColors.systemRed
+                                        : CupertinoColors.systemGreen,
                                   ),
-                                  child: Text(
-                                    available <= 0
-                                        ? "FULL"
-                                        : "$available disponibles",
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w600,
-                                      color: available <= 0
-                                          ? CupertinoColors.systemRed
-                                          : CupertinoColors.systemGreen,
-                                    ),
-                                  ),
-                                )
-                              ],
-                            ),
-                          );
-                        }).toList(),
-                      ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 28),
-
-              /// =============================
-              /// DATOS DEL CLIENTE
-              /// =============================
-
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: cardBg,
-                  borderRadius: BorderRadius.circular(24),
-                ),
-                child: Column(
-                  children: [
-
-                    CupertinoTextField(
-                      controller: _clientController,
-                      placeholder: "Nombre del cliente",
-                    ),
-
-                    const SizedBox(height: 12),
-
-                    CupertinoTextField(
-                      controller: _phoneController,
-                      placeholder: "Teléfono",
-                      keyboardType: TextInputType.phone,
-                    ),
-
-                    const SizedBox(height: 12),
-
-                    CupertinoTextField(
-                      controller: _locationController,
-                      placeholder: "Lugar del evento",
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 30),
-
-              /// =============================
-              /// SERVICIOS
-              /// =============================
-
-              ..._services.map((s) => Container(
-                margin: const EdgeInsets.only(bottom: 18),
-                padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                  color: cardBg,
-                  borderRadius: BorderRadius.circular(22),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          s.serviceName,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 16,
+                                ),
+                              )
+                            ],
                           ),
+                        );
+                      }).toList(),
+                    ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 28),
+
+            /// =============================
+            /// DATOS DEL CLIENTE
+            /// =============================
+
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: cardBg,
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: Column(
+                children: [
+
+                  CupertinoTextField(
+                    controller: _clientController,
+                    placeholder: "Nombre del cliente",
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  CupertinoTextField(
+                    controller: _phoneController,
+                    placeholder: "Teléfono",
+                    keyboardType: TextInputType.phone,
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  CupertinoTextField(
+                    controller: _locationController,
+                    placeholder: "Lugar del evento",
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 30),
+
+            /// =============================
+            /// SERVICIOS
+            /// =============================
+
+            ..._services.map((s) => Container(
+              margin: const EdgeInsets.only(bottom: 18),
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: cardBg,
+                borderRadius: BorderRadius.circular(22),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        s.serviceName,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 16,
                         ),
-                        CupertinoButton(
-                          padding: EdgeInsets.zero,
-                          child: const Icon(CupertinoIcons.delete),
-                          onPressed: () {
-                            setState(() {
-                              _services.remove(s);
-                            });
-                          },
-                        )
-                      ],
-                    ),
-
-                    const SizedBox(height: 10),
-
-                    CupertinoButton(
-                      padding: EdgeInsets.zero,
-                      onPressed: () => _selectPackage(s),
-                      child: Text(
-                        s.packageName == null
-                            ? "Seleccionar paquete"
-                            : "Paquete: ${s.packageName}",
                       ),
+                      CupertinoButton(
+                        padding: EdgeInsets.zero,
+                        child: const Icon(CupertinoIcons.delete),
+                        onPressed: () {
+                          setState(() {
+                            _services.remove(s);
+                          });
+                        },
+                      )
+                    ],
+                  ),
+
+                  const SizedBox(height: 10),
+
+                  CupertinoButton(
+                    padding: EdgeInsets.zero,
+                    onPressed: () => _selectPackage(s),
+                    child: Text(
+                      s.packageName == null
+                          ? "Seleccionar paquete"
+                          : "Paquete: ${s.packageName}",
                     ),
+                  ),
 
-                    CupertinoButton(
-                      padding: EdgeInsets.zero,
-                      onPressed: () => _selectOptions(s),
-                      child: const Text("Agregar opción extra"),
+                  CupertinoButton(
+                    padding: EdgeInsets.zero,
+                    onPressed: () => _selectOptions(s),
+                    child: const Text("Agregar opción extra"),
+                  ),
+
+                  const SizedBox(height: 8),
+
+                  Text(
+                    "Total servicio: \$${s.totalServicePrice.toStringAsFixed(0)}",
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
                     ),
-
-                    const SizedBox(height: 8),
-
-                    Text(
-                      "Total servicio: \$${s.totalServicePrice.toStringAsFixed(0)}",
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              )),
-
-              CupertinoButton(
-                onPressed: _addService,
-                child: const Text("+ Agregar barra"),
+                  ),
+                ],
               ),
+            )),
 
-              const SizedBox(height: 30),
 
-              /// =============================
-              /// TOTAL
-              /// =============================
+            CupertinoButton(
+              onPressed: _loadingServices ? null : _addService,
+              child: _loadingServices
+                  ? const CupertinoActivityIndicator()
+                  : const Text('+ Agregar barra'),
+            ),
 
-              Container(
-                padding: const EdgeInsets.all(22),
-                decoration: BoxDecoration(
-                  color: cardBg,
-                  borderRadius: BorderRadius.circular(26),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      "Total",
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: secondary,
-                      ),
-                    ),
-                    Text(
-                      "\$${totalPrice.toStringAsFixed(0)}",
-                      style: const TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
-                ),
+            const SizedBox(height: 30),
+
+            /// =============================
+            /// TOTAL
+            /// =============================
+
+            Container(
+              padding: const EdgeInsets.all(22),
+              decoration: BoxDecoration(
+                color: cardBg,
+                borderRadius: BorderRadius.circular(26),
               ),
-
-              const SizedBox(height: 28),
-
-              CupertinoButton.filled(
-                borderRadius: BorderRadius.circular(20),
-                onPressed: _save,
-                child: Text(widget.isEditing
-                    ? "Actualizar Evento"
-                    : "Crear Evento"),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    "Total",
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: secondary,
+                    ),
+                  ),
+                  Text(
+                    "\$${totalPrice.toStringAsFixed(0)}",
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+
+            const SizedBox(height: 28),
+
+            CupertinoButton.filled(
+              borderRadius: BorderRadius.circular(20),
+              onPressed: _save,
+              child: Text(widget.isEditing
+                  ? "Actualizar Evento"
+                  : "Crear Evento"),
+            ),
+          ],
         ),
-      );
-    }
+      ),
+    );
   }
+}
 
 
 class SelectedService {

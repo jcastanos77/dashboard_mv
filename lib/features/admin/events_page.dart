@@ -48,6 +48,7 @@ class _EventsPageState extends State<EventsPage> {
   DateTime? _selectedDay;
 
   bool _loading = true;
+  bool _openingCreateEvent = false;
 
   @override
   void initState() {
@@ -56,6 +57,7 @@ class _EventsPageState extends State<EventsPage> {
   }
 
   Future<void> _loadData() async {
+    if (!mounted) return;
 
     setState(() => _loading = true);
 
@@ -202,20 +204,53 @@ class _EventsPageState extends State<EventsPage> {
           "Eventos Futuros",
           style: TextStyle(fontWeight: FontWeight.w600),
         ),
-        trailing: CupertinoButton(
-          padding: EdgeInsets.zero,
-          child: const Icon(CupertinoIcons.add),
-          onPressed: () async {
-            await Navigator.push(
-              context,
-              CupertinoPageRoute(
-                builder: (_) =>
-                    CreateEventPage(
-                        businessId: widget.businessId),
-              ),
-            );
-            await _loadData();
-          },
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CupertinoButton(
+              padding: EdgeInsets.zero,
+              onPressed: _loading
+                  ? null
+                  : () async {
+                await _loadData();
+              },
+              child: const Icon(CupertinoIcons.refresh),
+            ),
+            CupertinoButton(
+              padding: EdgeInsets.zero,
+              child: const Icon(CupertinoIcons.add),
+              onPressed: _openingCreateEvent
+                  ? null
+                  : () async {
+                setState(() {
+                  _openingCreateEvent = true;
+                });
+
+                try {
+                  await Navigator.push(
+                    context,
+                    CupertinoPageRoute(
+                      builder: (_) => CreateEventPage(
+                        businessId: widget.businessId,
+                      ),
+                    ),
+                  );
+
+                  if (!mounted) return;
+
+                  await _loadData();
+                } catch (e) {
+                  debugPrint('Error al abrir CreateEventPage: $e');
+                } finally {
+                  if (mounted) {
+                    setState(() {
+                      _openingCreateEvent = false;
+                    });
+                  }
+                }
+              },
+            ),
+          ],
         ),
       ),
       child: SafeArea(
